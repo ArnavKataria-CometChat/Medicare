@@ -1,0 +1,24 @@
+{
+  "name": "medicare-backend",
+  "version": "1.0.0",
+  "description": "MediCare Backend Server",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node config/dbInit.js && node server.js",
+    "db:reset": "node config/dbInit.js && node config/dbReset.js",
+    "seed": "node config/dbInit.js && node database/seeders/seed.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^1.4.5-lts.1",
+    "pg": "^8.12.0",
+    "pg-hstore": "^2.3.4",
+    "sequelize": "^6.37.3",
+    "web-push": "^3.6.7"
+  }
+}

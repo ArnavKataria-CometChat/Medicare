@@ -1,0 +1,36 @@
+Suggested file name:
+SCOPE_OF_WORK.md
+The document should include:
+
+Application Use Case
+MediCare is a comprehensive digital health portal designed to facilitate end-to-end patient-to-doctor consultations, scheduling, and medical education. It serves as a unified virtual clinic where patients can explore verified medical professionals, schedule virtual or physical visits, chat securely, and learn about preventive healthcare through articles. or with the help of ai assistance 
+
+Problem statement 
+Navigating healthcare services is traditionally disjointed. Patients face several hurdles:
+* Long waiting times on phone calls to schedule appointments.
+* Difficulty verifying doctor specializations, bios, and real availability.
+* Lack of secure, encrypted channels for pre-consultation chat, voice, and video messaging.
+* Fragmented sources of reliable, medical-category educational material.
+
+MediCare solves this by bridging the gap between patients and doctors, offering streamlined scheduling, robust search filters, HIPAA-compliant chat and calling mechanisms, and structured medical articles. and ai assistance
+
+Target users
+Hospitals- (Staff, Doctors)
+patients
+
+User roles
+Hospitals- (Staff-views appointment Schedule; doctors- consult patients online, consult other doctors, track appointments)
+patients- (book appointments, Connect with Doctors online at convenience)
+
+User permissions
+User workflows
+Screens/pages
+Backend APIs
+Database entities
+Notification flows
+Admin dashboard scope
+Assumptions
+Out-of-scope items
+Acceptance criteria
+Testing plan
+Demo plan
