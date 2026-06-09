@@ -33,3 +33,12 @@ yarn-error.log*
 *.njsproj
 *.sln
 *.sw?
+
+# Expo / Mobile overrides
+mobile/.expo/
+mobile/web-build/
+mobile/dist/
+*.apk
+*.aab
+*.ipa
+*.jks
