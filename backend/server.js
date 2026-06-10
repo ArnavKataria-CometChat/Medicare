@@ -11,6 +11,7 @@ import recordRoutes from './routes/recordRoutes.js';
 import articleRoutes from './routes/articleRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import aiRoutes from './routes/aiRoutes.js';
+import notificationRoutes from './routes/notificationRoutes.js';
 import { errorHandler } from './middleware/errorMiddleware.js';
 
 dotenv.config();
@@ -35,6 +36,7 @@ app.use('/api/records', recordRoutes);
 app.use('/api/articles', articleRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/ai', aiRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Error Handler
 app.use(errorHandler);
@@ -44,6 +46,10 @@ const startServer = async () => {
   try {
     await sequelize.authenticate();
     console.log('Database connected successfully.');
+
+    // Sync models to ensure new columns/tables are created
+    await sequelize.sync({ alter: true });
+    console.log('Database models synced.');
 
     app.listen(PORT, () => {
       console.log(`MediCare backend server running on port ${PORT}`);

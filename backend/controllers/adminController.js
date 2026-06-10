@@ -1,5 +1,6 @@
 import { User, DoctorProfile, HealthArticle, ActivityLog, NotificationLog, Appointment, sequelize } from '../models/index.js';
 import { Op } from 'sequelize';
+import { sendPush } from '../services/pushService.js';
 
 // USER MANAGEMENT
 export const adminGetUsers = async (req, res, next) => {
@@ -191,6 +192,9 @@ export const adminDeactivateUser = async (req, res, next) => {
       payload: JSON.stringify({ message: 'Your account has been deactivated. Please contact support.' })
     });
 
+    // Send Push Notification in background
+    sendPush(user.id, 'Account Deactivated', 'Your account has been deactivated. Please contact support.', '/login').catch(err => console.error('Deactivation push failed:', err.message));
+
     await ActivityLog.create({
       userId: req.user.id,
       activityType: 'ADMIN_USER_DEACTIVATE',
@@ -262,6 +266,11 @@ export const adminCreateArticle = async (req, res, next) => {
         payload: JSON.stringify({ message: `New article: '${title}' is now available in the Health Library.` })
       }));
       await NotificationLog.bulkCreate(notifications);
+
+      // Send Push Notifications to patients in background
+      patients.forEach(p => {
+        sendPush(p.id, 'New Health Article', `New article: '${title}' is now available in the Health Library.`, `/articles/${article.id}`).catch(err => console.error('Patient article push failed:', err.message));
+      });
     }
 
     res.status(201).json(article);

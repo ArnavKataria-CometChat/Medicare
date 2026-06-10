@@ -29,6 +29,11 @@ const NotificationLog = sequelize.define('NotificationLog', {
     type: DataTypes.TEXT,
     allowNull: true,
   },
+  isRead: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+    allowNull: false,
+  },
 });
 
 export default NotificationLog;

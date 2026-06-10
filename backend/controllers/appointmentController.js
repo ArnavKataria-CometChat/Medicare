@@ -1,4 +1,5 @@
 import { Appointment, User, DoctorProfile, NotificationLog, ActivityLog } from '../models/index.js';
+import { sendPush } from '../services/pushService.js';
 
 export const getAppointments = async (req, res, next) => {
   try {
@@ -142,6 +143,10 @@ export const bookAppointment = async (req, res, next) => {
       })
     });
 
+    // Send Push Notifications in background
+    sendPush(patientId, 'Appointment Confirmed', message, '/appointments').catch(err => console.error('Patient push failed:', err.message));
+    sendPush(doctorProfile.user.id, 'New Appointment Booked', `New appointment booked by Patient: ${req.user.name} on ${appointmentDate} at ${appointmentTime}.`, '/appointments').catch(err => console.error('Doctor push failed:', err.message));
+
     // 4. Log Activity
     await ActivityLog.create({
       userId: patientId,
@@ -215,8 +220,12 @@ export const cancelAppointment = async (req, res, next) => {
       type: 'app',
       event: 'APPOINTMENT_CANCELLED',
       status: 'delivered',
-      payload: JSON.stringify({ message: doctorMsg, appointmentId: appointment.id })
+        payload: JSON.stringify({ message: doctorMsg, appointmentId: appointment.id })
     });
+
+    // Send Push Notifications in background
+    sendPush(appointment.patientId, 'Appointment Cancelled', patientMsg, '/appointments').catch(err => console.error('Patient push failed:', err.message));
+    sendPush(appointment.doctorProfile.user.id, 'Appointment Cancelled', doctorMsg, '/appointments').catch(err => console.error('Doctor push failed:', err.message));
 
     // Log Activity
     await ActivityLog.create({

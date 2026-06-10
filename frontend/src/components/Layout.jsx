@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import AIAssistant from './AIAssistant';
+import NotificationBell from './NotificationBell';
 
 const Layout = ({ children, currentPath, navigate }) => {
   const { isAuthenticated, user, logout } = useAuth();
@@ -30,11 +31,13 @@ const Layout = ({ children, currentPath, navigate }) => {
         { label: 'Book Specialist', path: '/doctors' },
         { label: 'Articles', path: '/articles' },
         { label: 'My Appointments', path: '/appointments' },
+        { label: 'Chats', path: '/chats' },
         { label: 'My Records', path: '/profile' }
       );
     } else if (user?.role === 'DOCTOR') {
       links.push(
         { label: 'Schedule', path: '/appointments' },
+        { label: 'Chats', path: '/chats' },
         { label: 'My Profile', path: '/profile' }
       );
     } else if (user?.role === 'STAFF') {
@@ -84,6 +87,9 @@ const Layout = ({ children, currentPath, navigate }) => {
               {link.label}
             </a>
           ))}
+
+          {/* Notification Bell */}
+          {isAuthenticated && user && <NotificationBell />}
 
           {/* Avatar Dropdown */}
           {isAuthenticated && user && (

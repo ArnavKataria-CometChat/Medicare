@@ -19,6 +19,15 @@ export const AuthProvider = ({ children }) => {
       if (response.ok) {
         const userData = await response.json();
         setUser(userData);
+        // Auto-subscribe to push notifications only if permission was already granted
+        // (first-time subscription requires a user gesture — handled by NotificationBell)
+        import('../utils/pushHelper')
+          .then(({ subscribeUserToPush, isPushPermissionGranted }) => {
+            if (isPushPermissionGranted()) {
+              subscribeUserToPush(authToken);
+            }
+          })
+          .catch((err) => console.error('Failed to load push helper:', err));
       } else {
         // Token is invalid/expired
         localStorage.removeItem('medicare_token');

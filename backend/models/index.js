@@ -6,6 +6,7 @@ import HealthArticle from './HealthArticle.js';
 import HealthRecord from './HealthRecord.js';
 import ActivityLog from './ActivityLog.js';
 import NotificationLog from './NotificationLog.js';
+import PushSubscription from './PushSubscription.js';
 
 // User <-> DoctorProfile (1:1)
 User.hasOne(DoctorProfile, { foreignKey: 'userId', as: 'doctorProfile', onDelete: 'CASCADE' });
@@ -31,6 +32,10 @@ ActivityLog.belongsTo(User, { foreignKey: 'userId', as: 'user' });
 User.hasMany(NotificationLog, { foreignKey: 'userId', as: 'notificationLogs', onDelete: 'CASCADE' });
 NotificationLog.belongsTo(User, { foreignKey: 'userId', as: 'user' });
 
+// User <-> PushSubscription (1:M)
+User.hasMany(PushSubscription, { foreignKey: 'userId', as: 'pushSubscriptions', onDelete: 'CASCADE' });
+PushSubscription.belongsTo(User, { foreignKey: 'userId', as: 'user' });
+
 export {
   sequelize,
   User,
@@ -40,4 +45,5 @@ export {
   HealthRecord,
   ActivityLog,
   NotificationLog,
+  PushSubscription
 };

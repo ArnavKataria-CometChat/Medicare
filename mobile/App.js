@@ -21,6 +21,10 @@ import PatientRecordsScreen from './src/screens/PatientRecordsScreen';
 import AIAssistant from './src/screens/AIAssistant';
 import ProfileScreen from './src/screens/ProfileScreen';
 import ArticlesScreen from './src/screens/ArticlesScreen';
+import ChatSimulationScreen from './src/screens/ChatSimulationScreen';
+import ChatsListScreen from './src/screens/ChatsListScreen';
+
+
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -34,6 +38,7 @@ const PatientTabs = () => {
           let iconName;
           if (route.name === 'Doctors') iconName = 'people-outline';
           else if (route.name === 'Appointments') iconName = 'calendar-outline';
+          else if (route.name === 'Chats') iconName = 'chatbubbles-outline';
           else if (route.name === 'Records') iconName = 'document-text-outline';
           else if (route.name === 'Articles') iconName = 'newspaper-outline';
           return <Ionicons name={iconName} size={size} color={color} />;
@@ -80,6 +85,7 @@ const PatientTabs = () => {
     >
       <Tab.Screen name="Doctors" component={DoctorsDirectoryScreen} options={{ title: 'Find Doctors' }} />
       <Tab.Screen name="Appointments" component={AppointmentsScreen} options={{ title: 'My Consultations' }} />
+      <Tab.Screen name="Chats" component={ChatsListScreen} options={{ title: 'Chats' }} />
       <Tab.Screen name="Records" component={PatientRecordsScreen} options={{ title: 'Medical Records' }} />
       <Tab.Screen name="Articles" component={ArticlesScreen} options={{ title: 'Medical Articles' }} />
     </Tab.Navigator>
@@ -95,6 +101,7 @@ const DoctorTabs = () => {
           let iconName;
           if (route.name === 'Home') iconName = 'home-outline';
           else if (route.name === 'Appointments') iconName = 'calendar-outline';
+          else if (route.name === 'Chats') iconName = 'chatbubbles-outline';
           else if (route.name === 'Profile') iconName = 'person-outline';
           return <Ionicons name={iconName} size={size} color={color} />;
         },
@@ -122,6 +129,7 @@ const DoctorTabs = () => {
     >
       <Tab.Screen name="Home" component={HomeScreen} options={{ title: 'Doctor Dashboard' }} />
       <Tab.Screen name="Appointments" component={AppointmentsScreen} options={{ title: 'Patient Schedule' }} />
+      <Tab.Screen name="Chats" component={ChatsListScreen} options={{ title: 'Chats' }} />
       <Tab.Screen name="Profile" component={ProfileScreen} options={{ title: 'My Profile' }} />
     </Tab.Navigator>
   );
@@ -223,6 +231,12 @@ const NavigationWrapper = () => {
               component={ConfirmationScreen}
               options={{ headerShown: false }}
             />
+            <Stack.Screen
+              name="ChatSimulation"
+              component={ChatSimulationScreen}
+              options={{ title: 'Telehealth Simulator' }}
+            />
+
           </>
         )}
       </Stack.Navigator>

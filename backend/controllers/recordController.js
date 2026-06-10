@@ -1,4 +1,5 @@
 import { HealthRecord, User, Appointment, DoctorProfile, NotificationLog, ActivityLog } from '../models/index.js';
+import { sendPush } from '../services/pushService.js';
 
 export const getMyRecords = async (req, res, next) => {
   try {
@@ -37,6 +38,9 @@ export const uploadRecord = async (req, res, next) => {
       status: 'delivered',
       payload: JSON.stringify({ message: msg, recordId: record.id })
     });
+
+    // Send Push Notification in background
+    sendPush(req.user.id, 'Medical Record Uploaded', msg, '/profile').catch(err => console.error('Record upload push failed:', err.message));
 
     await ActivityLog.create({
       userId: req.user.id,

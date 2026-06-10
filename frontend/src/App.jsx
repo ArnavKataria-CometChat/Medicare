@@ -21,6 +21,9 @@ import Confirmation from './pages/Confirmation';
 import Profile from './pages/Profile';
 import PatientRecords from './pages/PatientRecords';
 import StaffSchedule from './pages/StaffSchedule';
+import Chats from './pages/Chats';
+
+
 
 // Admin Portal Pages
 import AdminLogin from './pages/admin/AdminLogin';
@@ -155,6 +158,8 @@ const AppContent = () => {
         view = <Dashboard navigate={navigate} />;
       } else if (currentPath === '/appointments') {
         view = <Appointments navigate={navigate} />;
+      } else if (currentPath === '/chats') {
+        view = <Chats navigate={navigate} />;
       } else if (currentPath === '/book') {
         view = <BookAppointment navigate={navigate} navigationState={navState} />;
       } else if (currentPath.startsWith('/confirmation/')) {
