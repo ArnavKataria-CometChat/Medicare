@@ -44,7 +44,7 @@ const HomeScreen = ({ navigation }) => {
         <View style={styles.actionGrid}>
           <TouchableOpacity
             style={styles.actionCard}
-            onPress={() => navigation.navigate('Doctors')}
+            onPress={() => navigation.navigate('MainTabs', { screen: 'Doctors' })}
             activeOpacity={0.9}
           >
             <View style={[styles.iconBox, { backgroundColor: '#ccfbf1' }]}>
@@ -56,19 +56,19 @@ const HomeScreen = ({ navigation }) => {
 
           <TouchableOpacity
             style={styles.actionCard}
-            onPress={() => navigation.navigate('AI Chat')}
+            onPress={() => navigation.navigate('MainTabs', { screen: 'Articles' })}
             activeOpacity={0.9}
           >
-            <View style={[styles.iconBox, { backgroundColor: '#d1fae5' }]}>
-              <Ionicons name="chatbubble-ellipses" size={24} color="#10b981" />
+            <View style={[styles.iconBox, { backgroundColor: '#f3e8ff' }]}>
+              <Ionicons name="newspaper" size={24} color="#6b21a8" />
             </View>
-            <Text style={styles.actionCardTitle}>Consult AI</Text>
-            <Text style={styles.actionCardDesc}>Ask medical questions instantly</Text>
+            <Text style={styles.actionCardTitle}>Medical Articles</Text>
+            <Text style={styles.actionCardDesc}>Read curated health & wellness posts</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.actionCard}
-            onPress={() => navigation.navigate('Records')}
+            onPress={() => navigation.navigate('MainTabs', { screen: 'Records' })}
             activeOpacity={0.9}
           >
             <View style={[styles.iconBox, { backgroundColor: '#e0f2fe' }]}>
@@ -80,7 +80,7 @@ const HomeScreen = ({ navigation }) => {
 
           <TouchableOpacity
             style={styles.actionCard}
-            onPress={() => navigation.navigate('Appointments')}
+            onPress={() => navigation.navigate('MainTabs', { screen: 'Appointments' })}
             activeOpacity={0.9}
           >
             <View style={[styles.iconBox, { backgroundColor: '#fef3c7' }]}>
@@ -88,6 +88,22 @@ const HomeScreen = ({ navigation }) => {
             </View>
             <Text style={styles.actionCardTitle}>Appointments</Text>
             <Text style={styles.actionCardDesc}>Manage booking consultations</Text>
+          </TouchableOpacity>
+
+          {/* Full Width Consult AI card */}
+          <TouchableOpacity
+            style={[styles.actionCard, { width: '100%', flexDirection: 'row', alignItems: 'center', height: 80, marginTop: 8 }]}
+            onPress={() => navigation.navigate('AIChat')}
+            activeOpacity={0.9}
+          >
+            <View style={[styles.iconBox, { backgroundColor: '#d1fae5', marginRight: 16, marginBottom: 0 }]}>
+              <Ionicons name="chatbubble-ellipses" size={24} color="#10b981" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.actionCardTitle}>Consult AI Health Advisor</Text>
+              <Text style={styles.actionCardDesc}>Ask medical questions and get instant AI assistance</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#94a3b8" />
           </TouchableOpacity>
         </View>
 

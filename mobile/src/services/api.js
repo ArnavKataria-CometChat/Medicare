@@ -4,7 +4,7 @@ import Constants from 'expo-constants';
 
 // OVERRIDE: Set this to your computer's IP address if auto-detection picks the wrong interface
 // Currently: Metro is waiting on 192.168.1.17
-const MANUAL_IP = '192.168.1.17'; 
+const MANUAL_IP = ''; 
 
 // Auto-detect IP of Metro bundler host to support physical iPhone over local Wi-Fi
 let devIp = MANUAL_IP || 'localhost';
@@ -51,7 +51,7 @@ const request = async (endpoint, options = {}) => {
 
   const data = await response.json();
   if (!response.ok) {
-    throw new Error(data.message || 'Something went wrong');
+    throw new Error(data.error || data.message || 'Something went wrong');
   }
   return data;
 };
@@ -81,11 +81,41 @@ export const api = {
   getArticleById: (id) => request(`/api/articles/${id}`),
 
   // Appointments
-  getAppointments: () => request('/api/appointments'),
-  bookAppointment: (data) => request('/api/appointments', {
-    method: 'POST',
-    body: JSON.stringify(data),
-  }),
+  getAppointments: async () => {
+    const data = await request('/api/appointments');
+    const mapAppointment = (app) => {
+      if (!app) return app;
+      return {
+        ...app,
+        date: app.appointmentDate,
+        time: app.appointmentTime,
+      };
+    };
+    return Array.isArray(data) ? data.map(mapAppointment) : data;
+  },
+  bookAppointment: async (data) => {
+    const payload = {
+      doctorProfileId: data.doctorProfileId,
+      appointmentDate: data.date,
+      appointmentTime: data.time,
+      reason: data.reason,
+    };
+    const response = await request('/api/appointments', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    // The backend returns { message: '...', appointment: { ... } }
+    // Return the mapped appointment object directly so the Confirmation screen has id, date, time, reason
+    if (response && response.appointment) {
+      const app = response.appointment;
+      return {
+        ...app,
+        date: app.appointmentDate,
+        time: app.appointmentTime,
+      };
+    }
+    return response;
+  },
   cancelAppointment: (id) => request(`/api/appointments/${id}`, {
     method: 'PUT',
     body: JSON.stringify({ status: 'CANCELLED' }),

@@ -20,7 +20,11 @@ export const AuthProvider = ({ children }) => {
         setToken(storedToken);
         // Fetch full profile using the stored token
         const userData = await api.getProfile();
-        setUser(userData);
+        if (userData && userData.role === 'STAFF') {
+          await logout();
+        } else {
+          setUser(userData);
+        }
       }
     } catch (error) {
       console.error('Failed to load authentication data', error);
@@ -36,6 +40,9 @@ export const AuthProvider = ({ children }) => {
     try {
       const response = await api.login(email, password);
       const { token: userToken, user: userData } = response;
+      if (userData.role === 'STAFF') {
+        throw new Error('Staff accounts are not allowed to log in on mobile.');
+      }
       await AsyncStorage.setItem('token', userToken);
       setToken(userToken);
       setUser(userData);

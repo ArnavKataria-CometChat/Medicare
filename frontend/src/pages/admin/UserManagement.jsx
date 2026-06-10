@@ -154,9 +154,16 @@ const UserManagement = ({ navigate }) => {
                       </span>
                     </td>
                     <td>
-                      <span className={`badge ${u.status === 'active' ? 'badge-success' : 'badge-danger'}`}>
-                        {u.status}
-                      </span>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', alignItems: 'flex-start' }}>
+                        <span className={`badge ${u.status === 'active' ? 'badge-success' : 'badge-danger'}`} title="Account Status">
+                          {u.status}
+                        </span>
+                        {u.role === 'DOCTOR' && u.doctorProfile && (
+                          <span className={`badge ${u.doctorProfile.isAvailable ? 'badge-primary' : 'badge-warning'}`} title="Doctor Availability">
+                            {u.doctorProfile.isAvailable ? 'Online' : 'Offline'}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
                       {new Date(u.createdAt).toLocaleDateString()}

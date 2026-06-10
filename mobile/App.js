@@ -1,5 +1,5 @@
 import React, { useContext } from 'react';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, ActivityIndicator, StyleSheet, TouchableOpacity } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -20,6 +20,7 @@ import AppointmentsScreen from './src/screens/AppointmentsScreen';
 import PatientRecordsScreen from './src/screens/PatientRecordsScreen';
 import AIAssistant from './src/screens/AIAssistant';
 import ProfileScreen from './src/screens/ProfileScreen';
+import ArticlesScreen from './src/screens/ArticlesScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -28,15 +29,13 @@ const Tab = createBottomTabNavigator();
 const PatientTabs = () => {
   return (
     <Tab.Navigator
-      screenOptions={({ route }) => ({
+      screenOptions={({ route, navigation }) => ({
         tabBarIcon: ({ color, size }) => {
           let iconName;
-          if (route.name === 'Home') iconName = 'home-outline';
-          else if (route.name === 'Doctors') iconName = 'people-outline';
+          if (route.name === 'Doctors') iconName = 'people-outline';
           else if (route.name === 'Appointments') iconName = 'calendar-outline';
           else if (route.name === 'Records') iconName = 'document-text-outline';
-          else if (route.name === 'AI Chat') iconName = 'chatbubble-ellipses-outline';
-          else if (route.name === 'Profile') iconName = 'person-outline';
+          else if (route.name === 'Articles') iconName = 'newspaper-outline';
           return <Ionicons name={iconName} size={size} color={color} />;
         },
         tabBarActiveTintColor: '#0d9488', // Teal-600
@@ -61,14 +60,28 @@ const PatientTabs = () => {
           color: '#0f172a', // Slate-900
         },
         headerTintColor: '#0d9488',
+        headerLeft: () => (
+          <TouchableOpacity 
+            onPress={() => navigation.navigate('Home')} 
+            style={{ marginLeft: 16 }}
+          >
+            <Ionicons name="home-outline" size={24} color="#0d9488" />
+          </TouchableOpacity>
+        ),
+        headerRight: () => (
+          <TouchableOpacity 
+            onPress={() => navigation.navigate('Profile')} 
+            style={{ marginRight: 16 }}
+          >
+            <Ionicons name="person-outline" size={24} color="#0d9488" />
+          </TouchableOpacity>
+        ),
       })}
     >
-      <Tab.Screen name="Home" component={HomeScreen} options={{ title: 'Dashboard' }} />
       <Tab.Screen name="Doctors" component={DoctorsDirectoryScreen} options={{ title: 'Find Doctors' }} />
       <Tab.Screen name="Appointments" component={AppointmentsScreen} options={{ title: 'My Consultations' }} />
       <Tab.Screen name="Records" component={PatientRecordsScreen} options={{ title: 'Medical Records' }} />
-      <Tab.Screen name="AI Chat" component={AIAssistant} options={{ title: 'MediCare AI' }} />
-      <Tab.Screen name="Profile" component={ProfileScreen} options={{ title: 'My Profile' }} />
+      <Tab.Screen name="Articles" component={ArticlesScreen} options={{ title: 'Medical Articles' }} />
     </Tab.Navigator>
   );
 };
@@ -154,12 +167,47 @@ const NavigationWrapper = () => {
         ) : (
           // App Stack
           <>
-            <Stack.Screen
-              name="MainTabs"
-              component={user.role === 'DOCTOR' ? DoctorTabs : PatientTabs}
-              options={{ headerShown: false }}
-            />
+            {user.role === 'DOCTOR' ? (
+              <Stack.Screen
+                name="MainTabs"
+                component={DoctorTabs}
+                options={{ headerShown: false }}
+              />
+            ) : (
+              <>
+                <Stack.Screen
+                  name="Home"
+                  component={HomeScreen}
+                  options={({ navigation }) => ({
+                    title: 'Dashboard',
+                    headerRight: () => (
+                      <TouchableOpacity 
+                        onPress={() => navigation.navigate('Profile')} 
+                        style={{ marginRight: 16 }}
+                      >
+                        <Ionicons name="person-outline" size={24} color="#0d9488" />
+                      </TouchableOpacity>
+                    ),
+                  })}
+                />
+                <Stack.Screen
+                  name="MainTabs"
+                  component={PatientTabs}
+                  options={{ headerShown: false }}
+                />
+              </>
+            )}
             {/* Common Stack Screens */}
+            <Stack.Screen
+              name="Profile"
+              component={ProfileScreen}
+              options={{ title: 'My Profile' }}
+            />
+            <Stack.Screen
+              name="AIChat"
+              component={AIAssistant}
+              options={{ title: 'MediCare AI' }}
+            />
             <Stack.Screen
               name="DoctorDetails"
               component={DoctorDetailsScreen}

@@ -21,16 +21,16 @@ const seedDatabase = async () => {
       {
         name: 'Primary Admin',
         email: 'admin@medicare.com',
-        password: 'Admin@1234',
-        phone: '+1 (555) 019-2834',
+        password: 'Admin@123',
+        phone: '5550192834',
         role: 'ADMIN',
         status: 'active'
       },
       {
         name: 'Super Admin',
-        email: 'superadmin@medicare.com',
-        password: 'Admin@1234',
-        phone: '+1 (555) 019-5678',
+        email: 'admin.2@medicare.com',
+        password: 'Admin@123',
+        phone: '5550195678',
         role: 'ADMIN',
         status: 'active'
       }
@@ -58,13 +58,13 @@ const seedDatabase = async () => {
 
     for (const specGroup of doctorSpecs) {
       for (const docName of specGroup.names) {
-        const specialtyLower = specGroup.specialty.toLowerCase().replace(' ', '');
-        const email = `doctor.${specialtyLower}${docIndex}@medicare.com`;
+        const cleanName = docName.replace(/^Dr\.\s+/i, '').trim().toLowerCase();
+        const email = `${cleanName.split(/\s+/).join('.')}@medicare.com`;
         doctorUsers.push({
           name: docName,
           email: email,
-          password: 'Doctor@1234',
-          phone: `+1 (555) 020-${1000 + docIndex}`,
+          password: 'Doctor@123',
+          phone: `555020${(1000 + docIndex).toString().slice(-4)}`,
           role: 'DOCTOR',
           status: 'active'
         });
@@ -112,8 +112,8 @@ const seedDatabase = async () => {
       staffUsers.push({
         name: `Staff Member ${i}`,
         email: `staff.${i}@medicare.com`,
-        password: 'Staff@1234',
-        phone: `+1 (555) 030-${2000 + i}`,
+        password: 'Staff@123',
+        phone: `555030${(2000 + i).toString().slice(-4)}`,
         role: 'STAFF',
         status: 'active'
       });
@@ -142,8 +142,8 @@ const seedDatabase = async () => {
       patientUsers.push({
         name: name,
         email: `patient.${idx + 1}@medicare.com`,
-        password: 'Patient@1234',
-        phone: `+1 (555) 040-${3000 + idx + 1}`,
+        password: 'Patient@123',
+        phone: `555040${(3000 + idx + 1).toString().slice(-4)}`,
         role: 'PATIENT',
         status: 'active'
       });

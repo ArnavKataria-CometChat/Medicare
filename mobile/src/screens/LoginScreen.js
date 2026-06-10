@@ -9,7 +9,8 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  SafeAreaView
+  SafeAreaView,
+  Alert
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { AuthContext } from '../context/AuthContext';
@@ -51,7 +52,13 @@ const LoginScreen = ({ navigation }) => {
     } catch (error) {
       console.log('Login failed', error);
       const errMsg = error.message || 'Invalid email or password.';
-      if (errMsg.toLowerCase().includes('email')) {
+      if (errMsg.includes('Staff accounts are not allowed')) {
+        Alert.alert(
+          'Access Denied',
+          'Staff logins are not permitted through mobile devices.',
+          [{ text: 'OK' }]
+        );
+      } else if (errMsg.toLowerCase().includes('email')) {
         setErrors({ email: errMsg });
       } else if (errMsg.toLowerCase().includes('password')) {
         setErrors({ password: errMsg });

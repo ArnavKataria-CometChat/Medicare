@@ -90,14 +90,14 @@ const AppointmentsScreen = ({ navigation }) => {
   };
 
   const renderAppointmentItem = ({ item }) => {
-    const isCancelled = item.status === 'CANCELLED';
+    const isCancelled = item.status?.toUpperCase() === 'CANCELLED';
     const isDoctor = user?.role === 'DOCTOR';
     
     // For patient, we want to show doctor name. For doctor, we want to show patient name.
     const displayName = isDoctor 
       ? (item.patient?.name || 'Patient') 
       : `Dr. ${item.doctorProfile?.user?.name || 'Doctor'}`;
-      
+       
     const displaySpecialty = isDoctor 
       ? 'Patient Consultation' 
       : (item.doctorProfile?.specialization || 'Clinical Visit');
@@ -116,7 +116,7 @@ const AppointmentsScreen = ({ navigation }) => {
             ]}
           >
             <Text style={[styles.statusText, { color: isCancelled ? '#991b1b' : '#065f46' }]}>
-              {item.status}
+              {item.status?.toUpperCase()}
             </Text>
           </View>
         </View>

@@ -167,6 +167,10 @@ const PatientRecordsScreen = () => {
             </>
           )}
         </TouchableOpacity>
+        
+        <Text style={styles.limitInfo}>
+          Max size: 10MB • Supports PDF, Images, Text, and standard documents.
+        </Text>
       </View>
 
       <Text style={styles.historyTitle}>Your Upload History</Text>
@@ -236,6 +240,13 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 14,
     fontWeight: '700',
+  },
+  limitInfo: {
+    fontSize: 11,
+    color: '#64748b',
+    textAlign: 'center',
+    marginTop: 10,
+    fontWeight: '500',
   },
   historyTitle: {
     fontSize: 15,

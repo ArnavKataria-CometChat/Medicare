@@ -180,7 +180,7 @@ export const adminDeactivateUser = async (req, res, next) => {
     }
 
     user.status = 'inactive';
-    await user.save();
+    await user.save({ validate: false });
 
     // Trigger deactivation notification event
     await NotificationLog.create({
