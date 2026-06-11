@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
+import { SocketProvider } from './context/SocketContext';
 import Layout from './components/Layout';
 import AdminLayout from './components/AdminLayout';
 
@@ -54,6 +55,8 @@ const AppContent = () => {
     setCurrentPath(path);
     setNavState(state);
     window.scrollTo(0, 0);
+    // Dispatch custom event so SocketProvider knows about path changes
+    window.dispatchEvent(new Event('pathchange'));
   };
 
   if (loading) {
@@ -199,9 +202,36 @@ const App = () => {
   return (
     <ToastProvider>
       <AuthProvider>
-        <AppContent />
+        <AppContentWrapper />
       </AuthProvider>
     </ToastProvider>
+  );
+};
+
+const AppContentWrapper = () => {
+  const [currentPath, setCurrentPath] = useState(window.location.pathname);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      setCurrentPath(window.location.pathname);
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  // Listen for pushState changes via custom event
+  useEffect(() => {
+    const handlePathChange = () => {
+      setCurrentPath(window.location.pathname);
+    };
+    window.addEventListener('pathchange', handlePathChange);
+    return () => window.removeEventListener('pathchange', handlePathChange);
+  }, []);
+
+  return (
+    <SocketProvider currentPath={currentPath}>
+      <AppContent />
+    </SocketProvider>
   );
 };
 

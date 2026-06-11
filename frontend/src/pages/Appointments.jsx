@@ -51,7 +51,7 @@ const Appointments = ({ navigate }) => {
 
       if (response.ok) {
         addToast('Appointment cancelled successfully.', 'success');
-        fetchAppointments(); // Reload
+        fetchAppointments();
       } else {
         const data = await response.json();
         addToast(data.error || 'Failed to cancel appointment.', 'error');
@@ -59,6 +59,60 @@ const Appointments = ({ navigate }) => {
     } catch (error) {
       console.error('Cancel appointment error:', error);
       addToast('Network error while cancelling.', 'error');
+    }
+  };
+
+  const handleRequestChat = async (apptId) => {
+    try {
+      const response = await fetch(`/api/appointments/${apptId}/request-chat`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        addToast('Chat request sent to the doctor.', 'success');
+        fetchAppointments();
+      } else {
+        const data = await response.json();
+        addToast(data.error || 'Failed to send chat request.', 'error');
+      }
+    } catch (error) {
+      addToast('Network error while requesting chat.', 'error');
+    }
+  };
+
+  const handleAcceptChat = async (apptId) => {
+    try {
+      const response = await fetch(`/api/appointments/${apptId}/accept-chat`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        addToast('Chat request accepted. You can now chat with the patient.', 'success');
+        fetchAppointments();
+      } else {
+        const data = await response.json();
+        addToast(data.error || 'Failed to accept chat request.', 'error');
+      }
+    } catch (error) {
+      addToast('Network error while accepting chat.', 'error');
+    }
+  };
+
+  const handleDeclineChat = async (apptId) => {
+    try {
+      const response = await fetch(`/api/appointments/${apptId}/decline-chat`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        addToast('Chat request declined.', 'info');
+        fetchAppointments();
+      } else {
+        const data = await response.json();
+        addToast(data.error || 'Failed to decline chat request.', 'error');
+      }
+    } catch (error) {
+      addToast('Network error while declining chat.', 'error');
     }
   };
 
@@ -75,15 +129,26 @@ const Appointments = ({ navigate }) => {
   return (
     <div className="animate-fade" style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
       
-      <div>
-        <h1 style={{ fontSize: '2rem' }}>
-          {isPatient ? 'My Scheduled' : 'My Practice'} <span className="gradient-text">Appointments</span>
-        </h1>
-        <p style={{ color: 'var(--text-secondary)' }}>
-          {isPatient 
-            ? 'View dates, times, specialist details, or cancel your consultations.' 
-            : 'Track patient schedules and review health record links.'}
-        </p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div>
+          <h1 style={{ fontSize: '2rem' }}>
+            {isPatient ? 'My Scheduled' : 'My Practice'} <span className="gradient-text">Appointments</span>
+          </h1>
+          <p style={{ color: 'var(--text-secondary)' }}>
+            {isPatient 
+              ? 'View dates, times, specialist details, or cancel your consultations.' 
+              : 'Track patient schedules and review health record links.'}
+          </p>
+        </div>
+        {isPatient && (
+          <button
+            className="btn btn-primary"
+            onClick={() => navigate('/doctors')}
+            style={{ whiteSpace: 'nowrap', marginTop: '0.5rem' }}
+          >
+            + Book Specialist
+          </button>
+        )}
       </div>
 
       <div className="glass-panel" style={{ padding: '2rem' }}>
@@ -120,7 +185,7 @@ const Appointments = ({ navigate }) => {
                           {appt.status}
                         </span>
                       </td>
-                      <td style={{ display: 'flex', gap: '0.5rem' }}>
+                      <td style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                         {!isPatient && appt.status === 'confirmed' && (
                           <button
                             onClick={() => navigate(`/patients/${appt.patientId}`)}
@@ -135,6 +200,57 @@ const Appointments = ({ navigate }) => {
                             className="btn btn-danger btn-sm"
                           >
                             Cancel
+                          </button>
+                        )}
+                        {/* Patient: Request Chat button */}
+                        {isPatient && appt.status === 'confirmed' && appt.chatRequestStatus === 'none' && (
+                          <button
+                            onClick={() => handleRequestChat(appt.id)}
+                            className="btn btn-primary btn-sm"
+                          >
+                            Request Chat
+                          </button>
+                        )}
+                        {isPatient && appt.chatRequestStatus === 'pending' && (
+                          <span className="badge badge-warning" style={{ padding: '0.4rem 0.75rem', fontSize: '0.75rem' }}>Chat Pending</span>
+                        )}
+                        {isPatient && appt.chatRequestStatus === 'accepted' && (
+                          <button
+                            onClick={() => navigate('/chats')}
+                            className="btn btn-primary btn-sm"
+                            style={{ background: '#10b981' }}
+                          >
+                            Chat Now
+                          </button>
+                        )}
+                        {isPatient && appt.chatRequestStatus === 'declined' && (
+                          <span className="badge badge-danger" style={{ padding: '0.4rem 0.75rem', fontSize: '0.75rem' }}>Chat Declined</span>
+                        )}
+                        {/* Doctor: Accept/Decline buttons */}
+                        {!isPatient && appt.chatRequestStatus === 'pending' && (
+                          <>
+                            <button
+                              onClick={() => handleAcceptChat(appt.id)}
+                              className="btn btn-sm"
+                              style={{ background: '#10b981', color: 'white', border: 'none' }}
+                            >
+                              Accept Chat
+                            </button>
+                            <button
+                              onClick={() => handleDeclineChat(appt.id)}
+                              className="btn btn-danger btn-sm"
+                            >
+                              Decline
+                            </button>
+                          </>
+                        )}
+                        {!isPatient && appt.chatRequestStatus === 'accepted' && (
+                          <button
+                            onClick={() => navigate('/chats')}
+                            className="btn btn-primary btn-sm"
+                            style={{ background: '#10b981' }}
+                          >
+                            Chat Now
                           </button>
                         )}
                         {appt.status === 'cancelled' && (

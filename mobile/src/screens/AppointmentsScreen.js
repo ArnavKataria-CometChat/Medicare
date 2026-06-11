@@ -10,7 +10,8 @@ import {
   SafeAreaView
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { api } from '../services/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { api, API_BASE_URL } from '../services/api';
 import { AuthContext } from '../context/AuthContext';
 
 const AppointmentsScreen = ({ navigation }) => {
@@ -22,6 +23,14 @@ const AppointmentsScreen = ({ navigation }) => {
   useEffect(() => {
     fetchAppointments();
   }, []);
+
+  // Refresh when screen comes into focus
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      fetchAppointments();
+    });
+    return unsubscribe;
+  }, [navigation]);
 
   const fetchAppointments = async () => {
     try {
@@ -63,7 +72,6 @@ const AppointmentsScreen = ({ navigation }) => {
             try {
               setLoading(true);
               await api.cancelAppointment(id);
-              // Update state locally
               setAppointments((prev) =>
                 prev.map((app) => (app.id === id ? { ...app, status: 'CANCELLED' } : app))
               );
@@ -77,6 +85,63 @@ const AppointmentsScreen = ({ navigation }) => {
         },
       ]
     );
+  };
+
+  const handleRequestChat = async (id) => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const res = await fetch(`${API_BASE_URL}/api/appointments/${id}/request-chat`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (res.ok) {
+        Alert.alert('Success', 'Chat request sent to the doctor.');
+        fetchAppointments();
+      } else {
+        Alert.alert('Error', data.error || 'Failed to send chat request.');
+      }
+    } catch (err) {
+      Alert.alert('Error', 'Network error while requesting chat.');
+    }
+  };
+
+  const handleAcceptChat = async (id) => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const res = await fetch(`${API_BASE_URL}/api/appointments/${id}/accept-chat`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (res.ok) {
+        Alert.alert('Success', 'Chat request accepted. You can now chat with the patient.');
+        fetchAppointments();
+      } else {
+        Alert.alert('Error', data.error || 'Failed to accept chat request.');
+      }
+    } catch (err) {
+      Alert.alert('Error', 'Network error while accepting chat.');
+    }
+  };
+
+  const handleDeclineChat = async (id) => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const res = await fetch(`${API_BASE_URL}/api/appointments/${id}/decline-chat`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (res.ok) {
+        Alert.alert('Info', 'Chat request declined.');
+        fetchAppointments();
+      } else {
+        Alert.alert('Error', data.error || 'Failed to decline chat request.');
+      }
+    } catch (err) {
+      Alert.alert('Error', 'Network error while declining chat.');
+    }
   };
 
   const formatDate = (dateStr) => {
@@ -140,14 +205,80 @@ const AppointmentsScreen = ({ navigation }) => {
 
         {!isCancelled && (
           <View style={styles.cardFooter}>
-            <TouchableOpacity
-              style={styles.cancelBtn}
-              onPress={() => handleCancel(item.id)}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="close-circle-outline" size={16} color="#ef4444" style={{ marginRight: 6 }} />
-              <Text style={styles.cancelBtnText}>Cancel Consultation</Text>
-            </TouchableOpacity>
+            <View style={styles.footerButtons}>
+              <TouchableOpacity
+                style={styles.cancelBtn}
+                onPress={() => handleCancel(item.id)}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="close-circle-outline" size={16} color="#ef4444" style={{ marginRight: 6 }} />
+                <Text style={styles.cancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+
+              {/* Patient: Request Chat */}
+              {!isDoctor && item.chatRequestStatus === 'none' && (
+                <TouchableOpacity
+                  style={styles.requestChatBtn}
+                  onPress={() => handleRequestChat(item.id)}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="chatbubble-outline" size={14} color="#ffffff" style={{ marginRight: 5 }} />
+                  <Text style={styles.requestChatBtnText}>Request Chat</Text>
+                </TouchableOpacity>
+              )}
+              {!isDoctor && item.chatRequestStatus === 'pending' && (
+                <View style={styles.pendingBadge}>
+                  <Ionicons name="time-outline" size={14} color="#92400e" style={{ marginRight: 4 }} />
+                  <Text style={styles.pendingBadgeText}>Pending</Text>
+                </View>
+              )}
+              {!isDoctor && item.chatRequestStatus === 'accepted' && (
+                <TouchableOpacity
+                  style={styles.chatNowBtn}
+                  onPress={() => navigation.navigate('Chats')}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="chatbubbles" size={14} color="#ffffff" style={{ marginRight: 5 }} />
+                  <Text style={styles.chatNowBtnText}>Chat Now</Text>
+                </TouchableOpacity>
+              )}
+              {!isDoctor && item.chatRequestStatus === 'declined' && (
+                <View style={styles.declinedBadge}>
+                  <Text style={styles.declinedBadgeText}>Declined</Text>
+                </View>
+              )}
+
+              {/* Doctor: Accept / Decline */}
+              {isDoctor && item.chatRequestStatus === 'pending' && (
+                <>
+                  <TouchableOpacity
+                    style={styles.acceptChatBtn}
+                    onPress={() => handleAcceptChat(item.id)}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="checkmark-circle-outline" size={14} color="#ffffff" style={{ marginRight: 4 }} />
+                    <Text style={styles.acceptChatBtnText}>Accept</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.declineChatBtn}
+                    onPress={() => handleDeclineChat(item.id)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.declineChatBtnText}>Decline</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+              {isDoctor && item.chatRequestStatus === 'accepted' && (
+                <TouchableOpacity
+                  style={styles.chatNowBtn}
+                  onPress={() => navigation.navigate('Chats')}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="chatbubbles" size={14} color="#ffffff" style={{ marginRight: 5 }} />
+                  <Text style={styles.chatNowBtnText}>Chat Now</Text>
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
         )}
       </View>
@@ -304,7 +435,12 @@ const styles = StyleSheet.create({
     borderTopColor: '#f1f5f9',
     marginTop: 12,
     paddingTop: 12,
-    alignItems: 'flex-end',
+  },
+  footerButtons: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    alignItems: 'center',
   },
   cancelBtn: {
     flexDirection: 'row',
@@ -316,6 +452,83 @@ const styles = StyleSheet.create({
     borderColor: '#fca5a5',
   },
   cancelBtnText: {
+    color: '#ef4444',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  requestChatBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: '#0d9488',
+  },
+  requestChatBtnText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  pendingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    backgroundColor: '#fef3c7',
+  },
+  pendingBadgeText: {
+    color: '#92400e',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  chatNowBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: '#10b981',
+  },
+  chatNowBtnText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  declinedBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    backgroundColor: '#fee2e2',
+  },
+  declinedBadgeText: {
+    color: '#991b1b',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  acceptChatBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: '#10b981',
+  },
+  acceptChatBtnText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  declineChatBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#fca5a5',
+  },
+  declineChatBtnText: {
     color: '#ef4444',
     fontSize: 12,
     fontWeight: '700',

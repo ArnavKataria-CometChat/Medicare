@@ -10,24 +10,29 @@ const DoctorsDirectory = ({ navigate, navigationState }) => {
   );
   const [loading, setLoading] = useState(true);
 
-  const specialties = [
+  const [allSpecialties, setAllSpecialties] = useState([
     'Cardiology', 'Neurology', 'Dermatology', 'Orthopedics', 'Pediatrics', 
     'General Medicine', 'Psychiatry', 'Oncology', 'Ophthalmology', 'Gastroenterology', 'Endocrinology'
-  ];
+  ]);
 
   const fetchDoctors = async () => {
     setLoading(true);
     try {
-      const url = specialization 
-        ? `/api/doctors?specialization=${encodeURIComponent(specialization)}`
-        : '/api/doctors';
-      
-      const response = await fetch(url);
-      if (response.ok) {
-        const data = await response.json();
-        setDoctors(data);
+      // Always fetch all doctors to build the specialties list
+      const allRes = await fetch('/api/doctors');
+      let allDoctors = [];
+      if (allRes.ok) {
+        allDoctors = await allRes.json();
+        // Build dynamic specialties from actual data
+        const dbSpecialties = [...new Set(allDoctors.map(d => d.specialization).filter(Boolean))].sort();
+        setAllSpecialties(dbSpecialties);
+      }
+
+      // If a filter is applied, filter client-side
+      if (specialization) {
+        setDoctors(allDoctors.filter(d => d.specialization === specialization));
       } else {
-        addToast('Failed to load doctors list.', 'error');
+        setDoctors(allDoctors);
       }
     } catch (error) {
       console.error('Fetch doctors error:', error);
@@ -70,7 +75,7 @@ const DoctorsDirectory = ({ navigate, navigationState }) => {
             style={{ width: '220px', borderRadius: 'var(--radius-sm)' }}
           >
             <option value="">All Specialties</option>
-            {specialties.map((spec) => (
+            {allSpecialties.map((spec) => (
               <option key={spec} value={spec}>
                 {spec}
               </option>

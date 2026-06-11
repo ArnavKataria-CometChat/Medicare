@@ -16,11 +16,10 @@ if (!MANUAL_IP && Constants.expoConfig?.hostUri) {
 // Map appropriate base URL
 const getDefaultBaseUrl = () => {
   if (__DEV__) {
-    if (Platform.OS === 'android') {
-      return 'http://10.0.2.2:5000'; // Android emulator loops back to localhost:5000
-    } else {
-      return `http://${devIp}:5000`; // iOS physical device/simulator uses detected dev host
-    }
+    // Use the detected Metro host IP for both platforms.
+    // This works for physical devices over Wi-Fi (Expo Go).
+    // For Android emulator, set MANUAL_IP to '10.0.2.2' above.
+    return `http://${devIp}:5000`;
   }
   return 'http://localhost:5000'; // Fallback
 };

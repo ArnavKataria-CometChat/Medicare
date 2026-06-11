@@ -1,5 +1,5 @@
 import express from 'express';
-import { PushSubscription, NotificationLog, User } from '../models/index.js';
+import { PushSubscription, NotificationLog, User, ExpoPushToken } from '../models/index.js';
 import { publicKey } from '../services/pushService.js';
 import { authenticateToken } from '../middleware/authMiddleware.js';
 
@@ -90,6 +90,54 @@ router.post('/unsubscribe', authenticateToken, async (req, res, next) => {
 
     await PushSubscription.destroy({ where: { endpoint, userId: req.user.id } });
     res.status(200).json({ message: 'Push subscription unregistered successfully.' });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST register Expo push token (mobile iOS/Android)
+router.post('/expo-token', authenticateToken, async (req, res, next) => {
+  try {
+    const { token, platform } = req.body;
+    if (!token || !platform) {
+      return res.status(400).json({ error: 'token and platform are required.' });
+    }
+
+    if (!['ios', 'android'].includes(platform)) {
+      return res.status(400).json({ error: 'platform must be ios or android.' });
+    }
+
+    // Upsert: if token already exists, update the userId
+    const [record, created] = await ExpoPushToken.findOrCreate({
+      where: { token },
+      defaults: {
+        userId: req.user.id,
+        platform
+      }
+    });
+
+    if (!created) {
+      record.userId = req.user.id;
+      record.platform = platform;
+      await record.save();
+    }
+
+    res.status(201).json({ message: 'Expo push token registered successfully.' });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// DELETE remove Expo push token (on logout)
+router.delete('/expo-token', authenticateToken, async (req, res, next) => {
+  try {
+    const { token } = req.body;
+    if (!token) {
+      return res.status(400).json({ error: 'token is required.' });
+    }
+
+    await ExpoPushToken.destroy({ where: { token, userId: req.user.id } });
+    res.status(200).json({ message: 'Expo push token removed successfully.' });
   } catch (error) {
     next(error);
   }

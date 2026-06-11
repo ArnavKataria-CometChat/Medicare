@@ -1,4 +1,5 @@
 import { User, DoctorProfile, ActivityLog } from '../models/index.js';
+import { Op } from 'sequelize';
 import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
 
@@ -40,7 +41,7 @@ export const register = async (req, res, next) => {
       }
     }
 
-    const existingUser = await User.findOne({ where: { email } });
+    const existingUser = await User.findOne({ where: { email: { [Op.iLike]: email } } });
     if (existingUser) {
       return res.status(400).json({ error: 'Email is already registered.' });
     }
@@ -88,7 +89,7 @@ export const login = async (req, res, next) => {
       return res.status(400).json({ error: 'Email and password are required.' });
     }
 
-    const user = await User.findOne({ where: { email } });
+    const user = await User.findOne({ where: { email: { [Op.iLike]: email } } });
     if (!user) {
       return res.status(401).json({ error: 'Invalid email or password.' });
     }
@@ -139,7 +140,7 @@ export const adminLogin = async (req, res, next) => {
       return res.status(400).json({ error: 'Email and password are required.' });
     }
 
-    const user = await User.findOne({ where: { email } });
+    const user = await User.findOne({ where: { email: { [Op.iLike]: email } } });
     if (!user) {
       return res.status(401).json({ error: 'Invalid email or password.' });
     }

@@ -32,6 +32,11 @@ const Appointment = sequelize.define('Appointment', {
     defaultValue: 'confirmed',
     allowNull: false,
   },
+  chatRequestStatus: {
+    type: DataTypes.ENUM('none', 'pending', 'accepted', 'declined'),
+    defaultValue: 'none',
+    allowNull: false,
+  },
 });
 
 export default Appointment;

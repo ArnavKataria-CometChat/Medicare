@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useSocket } from '../context/SocketContext';
 import { subscribeUserToPush, isPushSupported, isPushPermissionGranted, getExistingSubscription } from '../utils/pushHelper';
 
-const NotificationBell = () => {
+const NotificationBell = ({ navigate }) => {
   const { token, user } = useAuth();
+  const { notificationTick } = useSocket();
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -61,18 +63,19 @@ const NotificationBell = () => {
   // Fetch on mount and periodically
   useEffect(() => {
     fetchNotifications();
-    const interval = setInterval(fetchNotifications, 30000); // Poll every 30s
+    const interval = setInterval(fetchNotifications, 30000);
     return () => clearInterval(interval);
   }, [fetchNotifications]);
 
-  const handleBellClick = () => {
-    setPanelOpen(!panelOpen);
-    if (!panelOpen) {
+  // Real-time refresh when socket triggers a new notification
+  useEffect(() => {
+    if (notificationTick > 0) {
       fetchNotifications();
     }
-  };
+  }, [notificationTick, fetchNotifications]);
 
-  const handleMarkAllRead = async () => {
+  // Mark all as read when panel opens
+  const markAllRead = useCallback(async () => {
     try {
       await fetch('/api/notifications/read-all', {
         method: 'POST',
@@ -83,13 +86,51 @@ const NotificationBell = () => {
     } catch (err) {
       console.error('Failed to mark notifications as read:', err);
     }
+  }, [token]);
+
+  const handleBellClick = () => {
+    const opening = !panelOpen;
+    setPanelOpen(opening);
+    if (opening) {
+      fetchNotifications();
+      // Auto mark all as read when opening
+      if (unreadCount > 0) {
+        markAllRead();
+      }
+    }
   };
 
   const handleEnablePush = async () => {
-    // This is called from a click handler — so the user gesture requirement is satisfied
     const result = await subscribeUserToPush(token);
     if (result?.success) {
       setPushEnabled(true);
+    }
+  };
+
+  // Navigate to the relevant page based on notification type
+  const handleNotificationClick = (notif) => {
+    setPanelOpen(false);
+    switch (notif.event) {
+      case 'APPOINTMENT_BOOKED':
+      case 'APPOINTMENT_CANCELLED':
+      case 'CHAT_REQUEST':
+      case 'CHAT_DECLINED':
+        navigate('/appointments');
+        break;
+      case 'CHAT_ACCEPTED':
+        navigate('/chats');
+        break;
+      case 'RECORD_UPLOADED':
+        navigate('/profile');
+        break;
+      case 'ARTICLE_PUBLISHED':
+        navigate('/articles');
+        break;
+      case 'CHAT_MESSAGE':
+        navigate('/chats');
+        break;
+      default:
+        navigate('/dashboard');
     }
   };
 
@@ -111,6 +152,10 @@ const NotificationBell = () => {
       case 'ACCOUNT_DEACTIVATED': return '🔒';
       case 'ARTICLE_PUBLISHED': return '📰';
       case 'RECORD_UPLOADED': return '📁';
+      case 'CHAT_MESSAGE': return '💬';
+      case 'CHAT_REQUEST': return '🔔';
+      case 'CHAT_ACCEPTED': return '✅';
+      case 'CHAT_DECLINED': return '🚫';
       default: return '🔔';
     }
   };
@@ -122,6 +167,10 @@ const NotificationBell = () => {
       case 'ACCOUNT_DEACTIVATED': return 'Account Update';
       case 'ARTICLE_PUBLISHED': return 'New Article';
       case 'RECORD_UPLOADED': return 'Record Uploaded';
+      case 'CHAT_MESSAGE': return 'New Message';
+      case 'CHAT_REQUEST': return 'Chat Request';
+      case 'CHAT_ACCEPTED': return 'Chat Accepted';
+      case 'CHAT_DECLINED': return 'Chat Declined';
       default: return 'Notification';
     }
   };
@@ -161,7 +210,6 @@ const NotificationBell = () => {
           <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
           <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
         </svg>
-        {/* Unread badge */}
         {unreadCount > 0 && (
           <span
             style={{
@@ -214,45 +262,16 @@ const NotificationBell = () => {
             style={{
               padding: '1rem 1.25rem',
               borderBottom: '1px solid var(--border-glass)',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
               background: 'var(--bg-primary)',
               flexShrink: 0
             }}
           >
-            <div>
-              <h4 style={{ fontSize: '0.95rem', fontWeight: '700', color: 'var(--text-primary)', margin: 0 }}>
-                Notifications
-              </h4>
-              {unreadCount > 0 && (
-                <span style={{ fontSize: '0.75rem', color: 'var(--primary)' }}>
-                  {unreadCount} unread
-                </span>
-              )}
-            </div>
-            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-              {unreadCount > 0 && (
-                <button
-                  onClick={handleMarkAllRead}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    fontSize: '0.75rem',
-                    color: 'var(--primary)',
-                    fontWeight: '600',
-                    padding: '0.25rem 0.5rem',
-                    borderRadius: 'var(--radius-sm)',
-                    transition: 'background var(--transition-fast)'
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.background = 'var(--primary-glow)'}
-                  onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
-                >
-                  Mark all read
-                </button>
-              )}
-            </div>
+            <h4 style={{ fontSize: '0.95rem', fontWeight: '700', color: 'var(--text-primary)', margin: 0 }}>
+              Notifications
+            </h4>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+              {notifications.length} notification{notifications.length !== 1 ? 's' : ''}
+            </span>
           </div>
 
           {/* Push Permission Banner */}
@@ -274,7 +293,7 @@ const NotificationBell = () => {
                   Enable push notifications
                 </p>
                 <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', margin: 0 }}>
-                  Get instant alerts for appointments & updates
+                  Get instant alerts even when the tab is closed
                 </p>
               </div>
               <button
@@ -288,11 +307,8 @@ const NotificationBell = () => {
                   cursor: 'pointer',
                   fontSize: '0.75rem',
                   fontWeight: '600',
-                  whiteSpace: 'nowrap',
-                  transition: 'background var(--transition-fast)'
+                  whiteSpace: 'nowrap'
                 }}
-                onMouseEnter={(e) => e.currentTarget.style.background = 'var(--primary-hover)'}
-                onMouseLeave={(e) => e.currentTarget.style.background = 'var(--primary)'}
               >
                 Enable
               </button>
@@ -310,7 +326,7 @@ const NotificationBell = () => {
                 <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem', opacity: 0.5 }}>🔕</div>
                 <p style={{ fontSize: '0.85rem', fontWeight: '500' }}>No notifications yet</p>
                 <p style={{ fontSize: '0.75rem', marginTop: '0.25rem' }}>
-                  You'll receive alerts for appointments, health articles, and more.
+                  You'll receive alerts for appointments, messages, and more.
                 </p>
               </div>
             ) : (
@@ -326,18 +342,19 @@ const NotificationBell = () => {
                 return (
                   <div
                     key={notif.id}
+                    onClick={() => handleNotificationClick(notif)}
                     style={{
                       padding: '0.9rem 1.25rem',
                       borderBottom: '1px solid var(--border-glass)',
                       display: 'flex',
                       gap: '0.75rem',
                       alignItems: 'flex-start',
-                      background: notif.isRead ? 'transparent' : 'rgba(13, 148, 136, 0.03)',
-                      transition: 'background var(--transition-fast)',
-                      cursor: 'default'
+                      background: 'transparent',
+                      transition: 'background 0.15s',
+                      cursor: 'pointer'
                     }}
                     onMouseEnter={(e) => e.currentTarget.style.background = 'var(--primary-glow)'}
-                    onMouseLeave={(e) => e.currentTarget.style.background = notif.isRead ? 'transparent' : 'rgba(13, 148, 136, 0.03)'}
+                    onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                   >
                     <div style={{
                       width: '36px',
@@ -354,24 +371,15 @@ const NotificationBell = () => {
                       {getEventIcon(notif.event)}
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.15rem' }}>
-                        <span style={{
-                          fontSize: '0.8rem',
-                          fontWeight: '700',
-                          color: notif.isRead ? 'var(--text-secondary)' : 'var(--text-primary)'
-                        }}>
-                          {getEventLabel(notif.event)}
-                        </span>
-                        {!notif.isRead && (
-                          <span style={{
-                            width: '7px',
-                            height: '7px',
-                            borderRadius: '50%',
-                            background: 'var(--primary)',
-                            flexShrink: 0
-                          }} />
-                        )}
-                      </div>
+                      <span style={{
+                        fontSize: '0.8rem',
+                        fontWeight: '700',
+                        color: 'var(--text-primary)',
+                        display: 'block',
+                        marginBottom: '0.15rem'
+                      }}>
+                        {getEventLabel(notif.event)}
+                      </span>
                       <p style={{
                         fontSize: '0.78rem',
                         color: 'var(--text-muted)',
@@ -389,6 +397,9 @@ const NotificationBell = () => {
                         {getTimeAgo(notif.createdAt)}
                       </span>
                     </div>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2" style={{ flexShrink: 0, marginTop: 4 }}>
+                      <polyline points="9 18 15 12 9 6" />
+                    </svg>
                   </div>
                 );
               })
@@ -397,7 +408,6 @@ const NotificationBell = () => {
         </div>
       )}
 
-      {/* Inline keyframe styles */}
       <style>{`
         @keyframes pulse-badge {
           0%, 100% { transform: scale(1); }

@@ -1,5 +1,6 @@
 import { Appointment, User, DoctorProfile, NotificationLog, ActivityLog } from '../models/index.js';
 import { sendPush } from '../services/pushService.js';
+import { sendExpoPush } from '../services/expoPushService.js';
 
 export const getAppointments = async (req, res, next) => {
   try {
@@ -147,6 +148,17 @@ export const bookAppointment = async (req, res, next) => {
     sendPush(patientId, 'Appointment Confirmed', message, '/appointments').catch(err => console.error('Patient push failed:', err.message));
     sendPush(doctorProfile.user.id, 'New Appointment Booked', `New appointment booked by Patient: ${req.user.name} on ${appointmentDate} at ${appointmentTime}.`, '/appointments').catch(err => console.error('Doctor push failed:', err.message));
 
+    // Send Expo Push (mobile)
+    sendExpoPush(patientId, 'Appointment Confirmed', message, { type: 'appointment_booked', appointmentId: appointment.id }).catch(err => console.error('Patient expo push failed:', err.message));
+    sendExpoPush(doctorProfile.user.id, 'New Appointment Booked', `New appointment booked by Patient: ${req.user.name} on ${appointmentDate} at ${appointmentTime}.`, { type: 'appointment_booked', appointmentId: appointment.id }).catch(err => console.error('Doctor expo push failed:', err.message));
+
+    // Send real-time socket notifications (in-app toast)
+    const sendSocketNotification = req.app.locals.sendSocketNotification;
+    if (sendSocketNotification) {
+      sendSocketNotification(patientId, { title: '✅ Appointment Confirmed', body: message, url: '/appointments' });
+      sendSocketNotification(doctorProfile.user.id, { title: '📅 New Appointment', body: `New appointment booked by ${req.user.name} on ${appointmentDate} at ${appointmentTime}.`, url: '/appointments' });
+    }
+
     // 4. Log Activity
     await ActivityLog.create({
       userId: patientId,
@@ -227,6 +239,17 @@ export const cancelAppointment = async (req, res, next) => {
     sendPush(appointment.patientId, 'Appointment Cancelled', patientMsg, '/appointments').catch(err => console.error('Patient push failed:', err.message));
     sendPush(appointment.doctorProfile.user.id, 'Appointment Cancelled', doctorMsg, '/appointments').catch(err => console.error('Doctor push failed:', err.message));
 
+    // Send Expo Push (mobile)
+    sendExpoPush(appointment.patientId, 'Appointment Cancelled', patientMsg, { type: 'appointment_cancelled', appointmentId: appointment.id }).catch(err => console.error('Patient expo push failed:', err.message));
+    sendExpoPush(appointment.doctorProfile.user.id, 'Appointment Cancelled', doctorMsg, { type: 'appointment_cancelled', appointmentId: appointment.id }).catch(err => console.error('Doctor expo push failed:', err.message));
+
+    // Send real-time socket notifications (in-app toast)
+    const sendSocketNotification = req.app.locals.sendSocketNotification;
+    if (sendSocketNotification) {
+      sendSocketNotification(appointment.patientId, { title: '❌ Appointment Cancelled', body: patientMsg, url: '/appointments' });
+      sendSocketNotification(appointment.doctorProfile.user.id, { title: '❌ Appointment Cancelled', body: doctorMsg, url: '/appointments' });
+    }
+
     // Log Activity
     await ActivityLog.create({
       userId: req.user.id,
@@ -239,6 +262,196 @@ export const cancelAppointment = async (req, res, next) => {
       message: 'Appointment cancelled successfully',
       appointment
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const requestChat = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const appointment = await Appointment.findByPk(id, {
+      include: [
+        { model: User, as: 'patient', attributes: ['name', 'id'] },
+        { model: DoctorProfile, as: 'doctorProfile', include: [{ model: User, as: 'user', attributes: ['name', 'id'] }] }
+      ]
+    });
+
+    if (!appointment) {
+      return res.status(404).json({ error: 'Appointment not found.' });
+    }
+
+    if (appointment.patientId !== req.user.id) {
+      return res.status(403).json({ error: 'Only the patient can request a chat.' });
+    }
+
+    if (appointment.status !== 'confirmed') {
+      return res.status(400).json({ error: 'Can only request chat for confirmed appointments.' });
+    }
+
+    if (appointment.chatRequestStatus !== 'none') {
+      return res.status(400).json({ error: `Chat request already ${appointment.chatRequestStatus}.` });
+    }
+
+    appointment.chatRequestStatus = 'pending';
+    await appointment.save();
+
+    const doctorUserId = appointment.doctorProfile.user.id;
+    const patientName = appointment.patient.name;
+    const message = `${patientName} has requested a chat for the appointment on ${appointment.appointmentDate} at ${appointment.appointmentTime}.`;
+
+    // Notification log
+    await NotificationLog.create({
+      userId: doctorUserId,
+      type: 'app',
+      event: 'CHAT_REQUEST',
+      status: 'delivered',
+      payload: JSON.stringify({ message, appointmentId: appointment.id, patientId: req.user.id })
+    });
+
+    // Push notifications
+    sendPush(doctorUserId, '💬 Chat Request', message, '/appointments').catch(err => console.error('Push error:', err.message));
+    sendExpoPush(doctorUserId, '💬 Chat Request', message, { type: 'chat_request', appointmentId: appointment.id }).catch(err => console.error('Expo push error:', err.message));
+
+    // Socket notification
+    const sendSocketNotification = req.app.locals.sendSocketNotification;
+    if (sendSocketNotification) {
+      sendSocketNotification(doctorUserId, { title: '💬 Chat Request', body: message, url: '/appointments' });
+    }
+
+    // Activity log
+    await ActivityLog.create({
+      userId: req.user.id,
+      activityType: 'CHAT_REQUEST',
+      description: `Requested chat with ${appointment.doctorProfile.user.name}`,
+      metadata: JSON.stringify({ appointmentId: appointment.id })
+    });
+
+    res.status(200).json({ message: 'Chat request sent successfully.', appointment });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const acceptChat = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const appointment = await Appointment.findByPk(id, {
+      include: [
+        { model: User, as: 'patient', attributes: ['name', 'id'] },
+        { model: DoctorProfile, as: 'doctorProfile', include: [{ model: User, as: 'user', attributes: ['name', 'id'] }] }
+      ]
+    });
+
+    if (!appointment) {
+      return res.status(404).json({ error: 'Appointment not found.' });
+    }
+
+    if (appointment.doctorProfile.user.id !== req.user.id) {
+      return res.status(403).json({ error: 'Only the assigned doctor can accept a chat request.' });
+    }
+
+    if (appointment.chatRequestStatus !== 'pending') {
+      return res.status(400).json({ error: 'No pending chat request to accept.' });
+    }
+
+    appointment.chatRequestStatus = 'accepted';
+    await appointment.save();
+
+    const patientId = appointment.patientId;
+    const doctorName = appointment.doctorProfile.user.name;
+    const message = `${doctorName} has accepted your chat request for the appointment on ${appointment.appointmentDate} at ${appointment.appointmentTime}. You can now start chatting!`;
+
+    // Notification log
+    await NotificationLog.create({
+      userId: patientId,
+      type: 'app',
+      event: 'CHAT_ACCEPTED',
+      status: 'delivered',
+      payload: JSON.stringify({ message, appointmentId: appointment.id, doctorId: req.user.id })
+    });
+
+    // Push notifications
+    sendPush(patientId, '✅ Chat Accepted', message, '/chats').catch(err => console.error('Push error:', err.message));
+    sendExpoPush(patientId, '✅ Chat Accepted', message, { type: 'chat_accepted', appointmentId: appointment.id }).catch(err => console.error('Expo push error:', err.message));
+
+    // Socket notification
+    const sendSocketNotification = req.app.locals.sendSocketNotification;
+    if (sendSocketNotification) {
+      sendSocketNotification(patientId, { title: '✅ Chat Accepted', body: message, url: '/chats' });
+    }
+
+    // Activity log
+    await ActivityLog.create({
+      userId: req.user.id,
+      activityType: 'CHAT_ACCEPT',
+      description: `Accepted chat request from ${appointment.patient.name}`,
+      metadata: JSON.stringify({ appointmentId: appointment.id })
+    });
+
+    res.status(200).json({ message: 'Chat request accepted.', appointment });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const declineChat = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const appointment = await Appointment.findByPk(id, {
+      include: [
+        { model: User, as: 'patient', attributes: ['name', 'id'] },
+        { model: DoctorProfile, as: 'doctorProfile', include: [{ model: User, as: 'user', attributes: ['name', 'id'] }] }
+      ]
+    });
+
+    if (!appointment) {
+      return res.status(404).json({ error: 'Appointment not found.' });
+    }
+
+    if (appointment.doctorProfile.user.id !== req.user.id) {
+      return res.status(403).json({ error: 'Only the assigned doctor can decline a chat request.' });
+    }
+
+    if (appointment.chatRequestStatus !== 'pending') {
+      return res.status(400).json({ error: 'No pending chat request to decline.' });
+    }
+
+    appointment.chatRequestStatus = 'declined';
+    await appointment.save();
+
+    const patientId = appointment.patientId;
+    const doctorName = appointment.doctorProfile.user.name;
+    const message = `${doctorName} has declined your chat request for the appointment on ${appointment.appointmentDate} at ${appointment.appointmentTime}.`;
+
+    // Notification log
+    await NotificationLog.create({
+      userId: patientId,
+      type: 'app',
+      event: 'CHAT_DECLINED',
+      status: 'delivered',
+      payload: JSON.stringify({ message, appointmentId: appointment.id })
+    });
+
+    // Push notifications
+    sendPush(patientId, '❌ Chat Declined', message, '/appointments').catch(err => console.error('Push error:', err.message));
+    sendExpoPush(patientId, '❌ Chat Declined', message, { type: 'chat_declined', appointmentId: appointment.id }).catch(err => console.error('Expo push error:', err.message));
+
+    // Socket notification
+    const sendSocketNotification = req.app.locals.sendSocketNotification;
+    if (sendSocketNotification) {
+      sendSocketNotification(patientId, { title: '❌ Chat Declined', body: message, url: '/appointments' });
+    }
+
+    // Activity log
+    await ActivityLog.create({
+      userId: req.user.id,
+      activityType: 'CHAT_DECLINE',
+      description: `Declined chat request from ${appointment.patient.name}`,
+      metadata: JSON.stringify({ appointmentId: appointment.id })
+    });
+
+    res.status(200).json({ message: 'Chat request declined.', appointment });
   } catch (error) {
     next(error);
   }

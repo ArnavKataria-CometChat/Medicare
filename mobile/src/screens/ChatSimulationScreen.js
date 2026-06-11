@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useContext, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,186 +9,198 @@ import {
   KeyboardAvoidingView,
   Platform,
   SafeAreaView,
-  Modal,
-  Image,
-  Dimensions
+  ActivityIndicator,
+  Alert
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-
-const { width, height } = Dimensions.get('window');
+import { AuthContext } from '../context/AuthContext';
+import { API_BASE_URL } from '../services/api';
+import io from 'socket.io-client';
 
 const ChatSimulationScreen = ({ route, navigation }) => {
-  const { contact } = route.params || { contact: { id: '1', name: 'Dr. Sarah Jenkins', desc: 'Cardiology Specialist', initials: 'SJ', role: 'DOCTOR' } };
-
-  // Pre-seeded messages mapping by contact ID
-  const initialMessagesMap = {
-    '1': [
-      { id: '1', sender: 'doctor', senderName: 'Dr. Sarah Jenkins', content: 'Hello Arnav, I reviewed your clinical data and ECG telemetry from yesterday. Everything looks normal, but I would like to check how you are feeling today.', time: '10:30 AM' },
-      { id: '2', sender: 'patient', senderName: 'Arnav Kataria', content: 'Thanks, Dr. Sarah! I have been feeling much better. Just some mild fatigue in the evenings.', time: '10:32 AM' },
-      { id: '3', sender: 'caregiver', senderName: 'Ananya Kataria', content: 'Hello doctor, I am monitoring his diet and water intake closely. Should we adjust his evening dosage if the fatigue persists?', time: '10:35 AM' }
-    ],
-    '2': [
-      { id: '1', sender: 'caregiver', senderName: 'Ananya Kataria', content: 'Hello doctor, do you have a brief moment today to review the blood sugar levels?', time: '09:15 AM' },
-      { id: '2', sender: 'doctor', senderName: 'Dr. Marcus Vance', content: 'Yes Ananya, please send the records here or click call to start a audio consultation.', time: '09:20 AM' }
-    ],
-    '3': [
-      { id: '1', sender: 'doctor', senderName: 'Dr. Evelyn Ross', content: 'Jane, please ensure you log your blood pressure values daily before breakfast.', time: 'Yesterday' }
-    ]
-  };
-
-  const [messages, setMessages] = useState(
-    initialMessagesMap[contact.id] || [
-      { id: '1', sender: contact.role === 'DOCTOR' ? 'doctor' : 'patient', senderName: contact.name, content: `Hello, this is ${contact.name}. How can I assist you today?`, time: '10:00 AM' }
-    ]
-  );
-
-  const [inputText, setInputText] = useState('');
+  const { contact } = route.params || {};
+  const { user, token } = useContext(AuthContext);
   
-  // Call states:
-  // status: 'idle' | 'ringing' | 'connected'
-  // type: 'voice' | 'video'
-  const [callStatus, setCallStatus] = useState('idle');
-  const [callType, setCallType] = useState(null);
-  const [callDuration, setCallDuration] = useState(0);
-  const [micMuted, setMicMuted] = useState(false);
-  const [cameraOff, setCameraOff] = useState(false);
+  const [messages, setMessages] = useState([]);
+  const [inputText, setInputText] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [typing, setTyping] = useState(null);
+  const [isOnline, setIsOnline] = useState(false);
+  
+  const socketRef = useRef(null);
+  const flatListRef = useRef(null);
+  const typingTimeoutRef = useRef(null);
 
-  const flatListRef = useRef();
-  const timerIntervalRef = useRef(null);
-  const ringTimeoutRef = useRef(null);
-
-  // Auto scroll to bottom
+  // Connect socket
   useEffect(() => {
-    setTimeout(() => {
-      flatListRef.current?.scrollToEnd({ animated: true });
-    }, 100);
-  }, [messages]);
+    if (!token || !contact) return;
 
-  // Call timer and automatic accept
+    const socket = io(API_BASE_URL, {
+      auth: { token },
+      transports: ['websocket', 'polling']
+    });
+
+    socket.on('connect', () => {
+      console.log('[MobileChat] Socket connected');
+      // Check if contact is online
+      socket.emit('user:status', { targetUserId: contact.id }, (response) => {
+        setIsOnline(response?.online || false);
+      });
+    });
+
+    socket.on('message:received', (message) => {
+      if (message.senderId === contact.id || message.receiverId === contact.id) {
+        setMessages(prev => [...prev, message]);
+        // Mark as read
+        if (message.senderId === contact.id) {
+          socket.emit('messages:read', { contactId: contact.id });
+        }
+      }
+    });
+
+    socket.on('typing:start', ({ userId, userName }) => {
+      if (userId === contact.id) {
+        setTyping(userName);
+      }
+    });
+
+    socket.on('typing:stop', ({ userId }) => {
+      if (userId === contact.id) {
+        setTyping(null);
+      }
+    });
+
+    socket.on('user:online', ({ userId, online }) => {
+      if (userId === contact.id) {
+        setIsOnline(online);
+      }
+    });
+
+    socketRef.current = socket;
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [token, contact]);
+
+  // Fetch message history
   useEffect(() => {
-    if (callStatus === 'ringing') {
-      // Auto-connect call after 2.5 seconds to simulate doctor picking up
-      ringTimeoutRef.current = setTimeout(() => {
-        setCallStatus('connected');
-      }, 2500);
-    } else if (callStatus === 'connected') {
-      timerIntervalRef.current = setInterval(() => {
-        setCallDuration(prev => prev + 1);
-      }, 1000);
+    if (!token || !contact) return;
+
+    const fetchMessages = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/chat/messages/${contact.id}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setMessages(data);
+        }
+      } catch (err) {
+        console.error('[MobileChat] Error fetching messages:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchMessages();
+
+    // Mark messages as read
+    if (socketRef.current) {
+      socketRef.current.emit('messages:read', { contactId: contact.id });
     }
+  }, [token, contact]);
 
-    return () => {
-      if (ringTimeoutRef.current) clearTimeout(ringTimeoutRef.current);
-      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-    };
-  }, [callStatus]);
-
-  // Clean timer on unmount
+  // Update navigation title
   useEffect(() => {
-    return () => {
-      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-      if (ringTimeoutRef.current) clearTimeout(ringTimeoutRef.current);
-    };
-  }, []);
+    if (contact) {
+      navigation.setOptions({
+        headerTitleAlign: 'left',
+        headerTitle: () => (
+          <View style={styles.headerTitleContainer}>
+            <Text style={styles.headerTitleText} numberOfLines={1}>{contact.name}</Text>
+            <Text style={[styles.headerSubtitle, { color: isOnline ? '#10b981' : '#94a3b8' }]}>
+              {isOnline ? '● Online' : '○ Offline'}
+            </Text>
+          </View>
+        ),
+        headerRight: () => (
+          <View style={styles.headerRight}>
+            <TouchableOpacity
+              onPress={() => Alert.alert('Coming Soon', 'Voice call feature coming in Step 2')}
+              style={styles.headerCallBtn}
+            >
+              <Ionicons name="call-outline" size={20} color="#0d9488" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => Alert.alert('Coming Soon', 'Video call feature coming in Step 2')}
+              style={styles.headerCallBtn}
+            >
+              <Ionicons name="videocam-outline" size={20} color="#0d9488" />
+            </TouchableOpacity>
+          </View>
+        )
+      });
+    }
+  }, [contact, isOnline, navigation]);
 
-  const handleSendMessage = () => {
-    if (!inputText.trim()) return;
+  const handleSendMessage = useCallback(() => {
+    if (!inputText.trim() || !socketRef.current) return;
 
-    const newMsg = {
-      id: Date.now().toString(),
-      sender: 'patient',
-      senderName: 'Arnav Kataria',
-      content: inputText.trim(),
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    };
-
-    setMessages(prev => [...prev, newMsg]);
+    const content = inputText.trim();
     setInputText('');
 
-    // Simulate doctor replying after 1.5 seconds
-    setTimeout(() => {
-      const docReply = {
-        id: (Date.now() + 1).toString(),
-        sender: 'doctor',
-        senderName: contact.name,
-        content: `Got it. Thanks for the update. I have logged this. Please click the video call icon above if you'd like to talk directly.`,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      };
-      setMessages(prev => [...prev, docReply]);
+    socketRef.current.emit('message:send', {
+      receiverId: contact.id,
+      content
+    }, (response) => {
+      if (response.success) {
+        setMessages(prev => [...prev, response.message]);
+      } else {
+        console.error('[MobileChat] Send failed:', response.error);
+      }
+    });
+
+    // Stop typing indicator
+    socketRef.current.emit('typing:stop', { receiverId: contact.id });
+  }, [inputText, contact]);
+
+  const handleInputChange = (text) => {
+    setInputText(text);
+    if (!socketRef.current || !contact) return;
+
+    socketRef.current.emit('typing:start', { receiverId: contact.id });
+
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    typingTimeoutRef.current = setTimeout(() => {
+      if (socketRef.current) {
+        socketRef.current.emit('typing:stop', { receiverId: contact.id });
+      }
     }, 1500);
   };
 
-  const startCall = (type) => {
-    setCallType(type);
-    setCallStatus('ringing');
-    setCallDuration(0);
-    setMicMuted(false);
-    setCameraOff(false);
+  const getInitials = (name) => {
+    if (!name) return '?';
+    const parts = name.replace(/^dr\.\s+/i, '').trim().split(/\s+/);
+    if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
   };
 
-  const endCall = () => {
-    if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-    if (ringTimeoutRef.current) clearTimeout(ringTimeoutRef.current);
-
-    // Append call outcome to chat logs
-    const minutes = Math.floor(callDuration / 60);
-    const seconds = callDuration % 60;
-    const durStr = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-    const logMsg = {
-      id: Date.now().toString(),
-      sender: 'system',
-      senderName: 'System',
-      content: `📞 ${callType === 'video' ? 'Video' : 'Voice'} call ended • Duration: ${durStr}`,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    };
-
-    setMessages(prev => [...prev, logMsg]);
-    setCallStatus('idle');
-    setCallType(null);
+  const formatTime = (dateStr) => {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
-  const formatDuration = (secs) => {
-    const m = Math.floor(secs / 60);
-    const s = secs % 60;
-    return `${m}:${s.toString().padStart(2, '0')}`;
-  };
-
-  const renderMessageItem = ({ item }) => {
-    if (item.sender === 'system') {
-      return (
-        <View style={styles.systemRow}>
-          <Text style={styles.systemText}>{item.content}</Text>
-        </View>
-      );
-    }
-
-    const isSelf = item.sender === 'patient';
-    let bubbleBg = '#ffffff';
-    let textColor = '#1e293b';
-    let bubbleAlign = 'flex-start';
-
-    if (isSelf) {
-      bubbleBg = '#0d9488'; // Teal
-      textColor = '#ffffff';
-      bubbleAlign = 'flex-end';
-    } else if (item.sender === 'caregiver') {
-      bubbleBg = '#f1f5f9'; // Slate caregiver bubble
-    }
-
+  const renderMessage = ({ item }) => {
+    const isMine = item.senderId === user?.id;
     return (
-      <View style={[styles.msgRow, { alignSelf: bubbleAlign }]}>
-        {!isSelf && (
-          <Text style={styles.senderNameText}>
-            {item.senderName} • {item.time}
-          </Text>
-        )}
-        {isSelf && (
-          <Text style={[styles.senderNameText, { textAlign: 'right' }]}>
-            You • {item.time}
-          </Text>
-        )}
-        <View style={[styles.bubble, { backgroundColor: bubbleBg }, isSelf ? styles.selfBubble : styles.otherBubble]}>
-          <Text style={[styles.bubbleText, { color: textColor }]}>
+      <View style={[styles.msgRow, isMine ? styles.msgRowSent : styles.msgRowReceived]}>
+        <Text style={styles.msgMeta}>
+          {item.sender?.name || (isMine ? user.name : contact.name)} • {formatTime(item.createdAt)}
+        </Text>
+        <View style={[styles.msgBubble, isMine ? styles.msgBubbleSent : styles.msgBubbleReceived]}>
+          <Text style={[styles.msgText, isMine ? styles.msgTextSent : styles.msgTextReceived]}>
             {item.content}
           </Text>
         </View>
@@ -196,428 +208,236 @@ const ChatSimulationScreen = ({ route, navigation }) => {
     );
   };
 
-  // Soundwave ripple rendering
-  const RippleBars = () => {
+  if (!contact) {
     return (
-      <View style={styles.rippleRow}>
-        <View style={[styles.rippleBar, { height: 16 }]} />
-        <View style={[styles.rippleBar, { height: 28 }]} />
-        <View style={[styles.rippleBar, { height: 42 }]} />
-        <View style={[styles.rippleBar, { height: 20 }]} />
-        <View style={[styles.rippleBar, { height: 32 }]} />
-        <View style={[styles.rippleBar, { height: 16 }]} />
-      </View>
+      <SafeAreaView style={styles.container}>
+        <View style={styles.emptyState}>
+          <Text>No contact selected</Text>
+        </View>
+      </SafeAreaView>
     );
-  };
+  }
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.emptyState}>
+          <ActivityIndicator size="large" color="#0d9488" />
+          <Text style={styles.loadingText}>Loading messages...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
       >
-        {/* Top Header with Call Buttons */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBack}>
-            <Ionicons name="arrow-back" size={24} color="#0d9488" />
-          </TouchableOpacity>
-          <View style={styles.headerTitleContainer}>
-            <Text style={styles.headerTitle}>{contact.name}</Text>
-            <Text style={styles.headerSub}>{contact.specialty || contact.desc}</Text>
-          </View>
-          <View style={styles.callBtns}>
-            <TouchableOpacity onPress={() => startCall('voice')} style={styles.callBtn}>
-              <Ionicons name="call" size={20} color="#0d9488" />
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => startCall('video')} style={styles.callBtn}>
-              <Ionicons name="videocam" size={20} color="#0d9488" />
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Message Feed */}
+        {/* Messages */}
         <FlatList
           ref={flatListRef}
           data={messages}
           keyExtractor={(item) => item.id}
-          renderItem={renderMessageItem}
-          contentContainerStyle={styles.feedContainer}
-          showsVerticalScrollIndicator={false}
+          renderItem={renderMessage}
+          contentContainerStyle={styles.messagesList}
+          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+          ListEmptyComponent={
+            <View style={styles.emptyMessages}>
+              <Ionicons name="chatbubble-outline" size={40} color="#cbd5e1" />
+              <Text style={styles.emptyMessagesText}>No messages yet. Say hello!</Text>
+            </View>
+          }
+          ListFooterComponent={
+            typing ? (
+              <View style={styles.typingContainer}>
+                <Text style={styles.typingText}>{typing} is typing...</Text>
+              </View>
+            ) : null
+          }
         />
 
-        {/* Keyboard Input area */}
-        <View style={styles.inputContainer}>
+        {/* Input Bar */}
+        <View style={styles.inputBar}>
           <TextInput
-            style={styles.textInput}
-            placeholder="Type message for consult room..."
+            style={styles.input}
+            placeholder={`Message ${contact.name}...`}
             placeholderTextColor="#94a3b8"
             value={inputText}
-            onChangeText={setInputText}
+            onChangeText={handleInputChange}
             multiline
+            maxLength={1000}
           />
           <TouchableOpacity
             style={[styles.sendBtn, !inputText.trim() && styles.sendBtnDisabled]}
             onPress={handleSendMessage}
             disabled={!inputText.trim()}
           >
-            <Ionicons name="send" size={16} color="#ffffff" />
+            <Ionicons name="send" size={20} color="#ffffff" />
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
-
-      {/* ========================================================== */}
-      {/* FULL SCREEN CALL MODAL */}
-      {/* ========================================================== */}
-      <Modal
-        visible={callStatus !== 'idle'}
-        animationType="slide"
-        transparent={false}
-      >
-        <View style={styles.callContainer}>
-          {/* Main Video Background View */}
-          {callStatus === 'connected' && callType === 'video' && !cameraOff && (
-            <View style={styles.videoStreamBg}>
-              <Ionicons name="person" size={150} color="rgba(255,255,255,0.15)" />
-              <Text style={styles.liveFeedLabel}>{contact.name} Camera (Simulated Feed)</Text>
-            </View>
-          )}
-
-          {/* Caller Details Header */}
-          <View style={styles.callHeader}>
-            <View style={styles.avatarCircle}>
-              <Text style={styles.avatarInitials}>{contact.initials}</Text>
-            </View>
-            <Text style={styles.callerName}>{contact.name}</Text>
-            <Text style={styles.callStatusText}>
-              {callStatus === 'ringing' ? 'Ringing...' : 'Connected Consultation'}
-            </Text>
-            {callStatus === 'connected' && (
-              <Text style={styles.callDuration}>{formatDuration(callDuration)}</Text>
-            )}
-          </View>
-
-          {/* Connected state visuals */}
-          {callStatus === 'connected' && (
-            <View style={styles.connectedVisualArea}>
-              {callType === 'video' ? (
-                // PIP self frame
-                <View style={styles.pipCamera}>
-                  <Text style={styles.pipLabel}>Self</Text>
-                  <Ionicons name="camera-reverse" size={24} color="rgba(255,255,255,0.6)" />
-                </View>
-              ) : (
-                // Voice call ripple wave
-                <RippleBars />
-              )}
-            </View>
-          )}
-
-          {/* Controls Bar */}
-          <View style={styles.controlsBar}>
-            {callStatus === 'connected' && (
-              <View style={styles.midControlsRow}>
-                <TouchableOpacity
-                  style={[styles.controlCircle, micMuted && styles.controlCircleActive]}
-                  onPress={() => setMicMuted(!micMuted)}
-                >
-                  <Ionicons name={micMuted ? "mic-off" : "mic"} size={22} color={micMuted ? "#0f172a" : "#ffffff"} />
-                </TouchableOpacity>
-
-                {callType === 'video' && (
-                  <TouchableOpacity
-                    style={[styles.controlCircle, cameraOff && styles.controlCircleActive]}
-                    onPress={() => setCameraOff(!cameraOff)}
-                  >
-                    <Ionicons name={cameraOff ? "videocam-off" : "videocam"} size={22} color={cameraOff ? "#0f172a" : "#ffffff"} />
-                  </TouchableOpacity>
-                )}
-              </View>
-            )}
-
-            {/* End Call Button */}
-            <TouchableOpacity style={styles.endCallBtn} onPress={endCall}>
-              <Ionicons name="call-outline" size={26} color="#ffffff" style={{ transform: [{ rotate: '135deg' }] }} />
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  safeArea: {
+  container: {
     flex: 1,
     backgroundColor: '#f8fafc',
   },
   keyboardView: {
     flex: 1,
   },
-  header: {
+  headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#ffffff',
-    borderBottomWidth: 1,
-    borderColor: '#e2e8f0',
+    marginRight: 8,
+    gap: 6,
   },
-  headerBack: {
-    marginRight: 12,
+  headerCallBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#f1f5f9',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   headerTitleContainer: {
-    flex: 1,
+    flexDirection: 'column',
+    justifyContent: 'center',
+    alignItems: 'flex-start',
+    marginLeft: -8,
   },
-  headerTitle: {
+  headerTitleText: {
     fontSize: 16,
     fontWeight: '700',
     color: '#0f172a',
   },
-  headerSub: {
-    fontSize: 12,
-    color: '#0d9488',
-    fontWeight: '500',
+  headerSubtitle: {
+    fontSize: 11,
+    marginTop: 1,
   },
-  callBtns: {
-    flexDirection: 'row',
-    gap: 8,
+  onlineDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
-  callBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: '#f0fdf4',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  feedContainer: {
-    padding: 16,
-    paddingBottom: 24,
-  },
-  msgRow: {
-    marginBottom: 16,
-    maxWidth: '80%',
-  },
-  senderNameText: {
-    fontSize: 10,
-    color: '#94a3b8',
-    marginBottom: 2,
-    paddingHorizontal: 4,
-  },
-  bubble: {
-    borderRadius: 16,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  selfBubble: {
-    borderBottomRightRadius: 2,
-  },
-  otherBubble: {
-    borderBottomLeftRadius: 2,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  bubbleText: {
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  systemRow: {
-    alignItems: 'center',
-    marginVertical: 12,
-    width: '100%',
-  },
-  systemText: {
+  onlineText: {
     fontSize: 12,
     color: '#64748b',
-    backgroundColor: '#e2e8f0',
-    paddingVertical: 4,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    overflow: 'hidden',
   },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
+  messagesList: {
+    padding: 16,
+    flexGrow: 1,
+  },
+  msgRow: {
+    marginBottom: 12,
+    maxWidth: '78%',
+  },
+  msgRowSent: {
+    alignSelf: 'flex-end',
+    alignItems: 'flex-end',
+  },
+  msgRowReceived: {
+    alignSelf: 'flex-start',
+    alignItems: 'flex-start',
+  },
+  msgMeta: {
+    fontSize: 10,
+    color: '#94a3b8',
+    marginBottom: 3,
+    paddingHorizontal: 4,
+  },
+  msgBubble: {
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 18,
+  },
+  msgBubbleSent: {
+    backgroundColor: '#0d9488',
+    borderBottomRightRadius: 4,
+  },
+  msgBubbleReceived: {
     backgroundColor: '#ffffff',
-    borderTopWidth: 1,
+    borderWidth: 1,
     borderColor: '#e2e8f0',
-    paddingBottom: Platform.OS === 'ios' ? 24 : 12,
+    borderBottomLeftRadius: 4,
   },
-  textInput: {
-    flex: 1,
-    backgroundColor: '#f1f5f9',
-    borderRadius: 20,
+  msgText: {
+    fontSize: 15,
+    lineHeight: 21,
+  },
+  msgTextSent: {
+    color: '#ffffff',
+  },
+  msgTextReceived: {
+    color: '#0f172a',
+  },
+  typingContainer: {
     paddingHorizontal: 16,
     paddingVertical: 8,
-    fontSize: 14,
-    color: '#0f172a',
+  },
+  typingText: {
+    fontSize: 12,
+    color: '#64748b',
+    fontStyle: 'italic',
+  },
+  inputBar: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: '#ffffff',
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
+    gap: 10,
+  },
+  input: {
+    flex: 1,
+    backgroundColor: '#f1f5f9',
+    borderRadius: 22,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    fontSize: 15,
     maxHeight: 100,
-    marginRight: 8,
+    color: '#0f172a',
   },
   sendBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     backgroundColor: '#0d9488',
-    justifyContent: 'center',
     alignItems: 'center',
+    justifyContent: 'center',
   },
   sendBtnDisabled: {
     backgroundColor: '#cbd5e1',
   },
-
-  /* CALL OVERLAY STYLING */
-  callContainer: {
+  emptyState: {
     flex: 1,
-    backgroundColor: '#0f172a',
-    justifyContent: 'space-between',
-    paddingVertical: 60,
-    paddingHorizontal: 30,
-  },
-  videoStreamBg: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: '#1e293b',
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'center',
-    opacity: 0.85,
+    gap: 12,
   },
-  liveFeedLabel: {
-    color: '#94a3b8',
-    fontSize: 12,
-    marginTop: 10,
-    textAlign: 'center',
-  },
-  callHeader: {
-    alignItems: 'center',
-    zIndex: 10,
-  },
-  avatarCircle: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
-    backgroundColor: '#0d9488',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 15,
-    elevation: 10,
-  },
-  avatarInitials: {
-    fontSize: 32,
-    fontWeight: '800',
-    color: '#ffffff',
-  },
-  callerName: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#ffffff',
-    marginBottom: 4,
-  },
-  callStatusText: {
+  loadingText: {
     fontSize: 14,
-    color: '#2dd4bf',
-    fontWeight: '600',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
+    color: '#64748b',
+    marginTop: 8,
   },
-  callDuration: {
-    fontSize: 16,
-    color: '#ffffff',
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
-    marginTop: 6,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    paddingHorizontal: 10,
-    paddingVertical: 2,
-    borderRadius: 10,
-    overflow: 'hidden',
-  },
-  connectedVisualArea: {
+  emptyMessages: {
     flex: 1,
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'center',
-    width: '100%',
+    paddingTop: 80,
+    gap: 12,
   },
-  pipCamera: {
-    position: 'absolute',
-    top: 20,
-    right: 0,
-    width: 90,
-    height: 140,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.3)',
-    backgroundColor: '#020617',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 10,
+  emptyMessagesText: {
+    fontSize: 14,
+    color: '#94a3b8',
   },
-  pipLabel: {
-    position: 'absolute',
-    bottom: 4,
-    fontSize: 10,
-    color: '#ffffff',
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    paddingHorizontal: 4,
-    borderRadius: 2,
-  },
-  rippleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  rippleBar: {
-    width: 4,
-    backgroundColor: '#2dd4bf',
-    borderRadius: 2,
-  },
-  controlsBar: {
-    alignItems: 'center',
-    width: '100%',
-    zIndex: 10,
-  },
-  midControlsRow: {
-    flexDirection: 'row',
-    gap: 20,
-    marginBottom: 30,
-  },
-  controlCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  controlCircleActive: {
-    backgroundColor: '#ffffff',
-  },
-  endCallBtn: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: '#ef4444',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 8,
-  }
 });
 
 export default ChatSimulationScreen;

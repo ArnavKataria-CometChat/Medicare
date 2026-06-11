@@ -28,17 +28,14 @@ const Layout = ({ children, currentPath, navigate }) => {
 
     if (user?.role === 'PATIENT') {
       links.push(
-        { label: 'Book Specialist', path: '/doctors' },
         { label: 'Articles', path: '/articles' },
         { label: 'My Appointments', path: '/appointments' },
-        { label: 'Chats', path: '/chats' },
-        { label: 'My Records', path: '/profile' }
+        { label: 'Chats', path: '/chats' }
       );
     } else if (user?.role === 'DOCTOR') {
       links.push(
         { label: 'Schedule', path: '/appointments' },
-        { label: 'Chats', path: '/chats' },
-        { label: 'My Profile', path: '/profile' }
+        { label: 'Chats', path: '/chats' }
       );
     } else if (user?.role === 'STAFF') {
       links.push({ label: 'System Schedule', path: '/schedule' });
@@ -89,7 +86,7 @@ const Layout = ({ children, currentPath, navigate }) => {
           ))}
 
           {/* Notification Bell */}
-          {isAuthenticated && user && <NotificationBell />}
+          {isAuthenticated && user && <NotificationBell navigate={navigate} />}
 
           {/* Avatar Dropdown */}
           {isAuthenticated && user && (
@@ -138,6 +135,28 @@ const Layout = ({ children, currentPath, navigate }) => {
                     <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', textTransform: 'capitalize', margin: 0 }}>Role: {user.role.toLowerCase()}</p>
                   </div>
                   <div style={{ borderTop: '1px solid #e2e8f0', margin: '0.25rem 0' }}></div>
+                  {(user.role === 'DOCTOR' || user.role === 'PATIENT') && (
+                    <button
+                      onClick={() => {
+                        setDropdownOpen(false);
+                        navigate('/profile');
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '0.5rem',
+                        background: 'none',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        fontSize: '0.85rem',
+                        color: 'var(--text-primary)',
+                        fontWeight: '500',
+                        textAlign: 'left'
+                      }}
+                    >
+                      My Profile
+                    </button>
+                  )}
                   <button
                     onClick={() => {
                       setDropdownOpen(false);
@@ -157,7 +176,7 @@ const Layout = ({ children, currentPath, navigate }) => {
 
       <main className="main-content">{children}</main>
 
-      <footer
+      {currentPath !== '/chats' && <footer
         style={{
           background: '#0f172a',
           color: '#94a3b8',
@@ -243,7 +262,7 @@ const Layout = ({ children, currentPath, navigate }) => {
         <div style={{ borderTop: '1px solid #1e293b', paddingTop: '1.5rem', textAlign: 'center', color: '#475569', fontSize: '0.75rem' }}>
           <p>&copy; {new Date().getFullYear()} MediCare Inc. All clinical records are secured and audited under strict standards.</p>
         </div>
-      </footer>
+      </footer>}
 
       {isAuthenticated && <AIAssistant navigate={navigate} />}
     </div>

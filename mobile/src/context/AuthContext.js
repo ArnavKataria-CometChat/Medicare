@@ -1,6 +1,7 @@
 import React, { createContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api } from '../services/api';
+import { unregisterPushToken } from '../services/notifications';
 
 export const AuthContext = createContext();
 
@@ -74,6 +75,9 @@ export const AuthProvider = ({ children }) => {
   const logout = async () => {
     setIsLoading(true);
     try {
+      // Unregister push token before logout
+      await unregisterPushToken();
+      
       // Best-effort logout call to the backend
       if (token) {
         await fetch(`${api.API_BASE_URL || 'http://localhost:5000'}/api/auth/logout`, {

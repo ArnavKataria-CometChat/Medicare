@@ -7,6 +7,8 @@ import HealthRecord from './HealthRecord.js';
 import ActivityLog from './ActivityLog.js';
 import NotificationLog from './NotificationLog.js';
 import PushSubscription from './PushSubscription.js';
+import Message from './Message.js';
+import ExpoPushToken from './ExpoPushToken.js';
 
 // User <-> DoctorProfile (1:1)
 User.hasOne(DoctorProfile, { foreignKey: 'userId', as: 'doctorProfile', onDelete: 'CASCADE' });
@@ -36,6 +38,16 @@ NotificationLog.belongsTo(User, { foreignKey: 'userId', as: 'user' });
 User.hasMany(PushSubscription, { foreignKey: 'userId', as: 'pushSubscriptions', onDelete: 'CASCADE' });
 PushSubscription.belongsTo(User, { foreignKey: 'userId', as: 'user' });
 
+// User <-> Message (sent/received)
+User.hasMany(Message, { foreignKey: 'senderId', as: 'sentMessages', onDelete: 'CASCADE' });
+User.hasMany(Message, { foreignKey: 'receiverId', as: 'receivedMessages', onDelete: 'CASCADE' });
+Message.belongsTo(User, { foreignKey: 'senderId', as: 'sender' });
+Message.belongsTo(User, { foreignKey: 'receiverId', as: 'receiver' });
+
+// User <-> ExpoPushToken (1:M)
+User.hasMany(ExpoPushToken, { foreignKey: 'userId', as: 'expoPushTokens', onDelete: 'CASCADE' });
+ExpoPushToken.belongsTo(User, { foreignKey: 'userId', as: 'user' });
+
 export {
   sequelize,
   User,
@@ -45,5 +57,7 @@ export {
   HealthRecord,
   ActivityLog,
   NotificationLog,
-  PushSubscription
+  PushSubscription,
+  Message,
+  ExpoPushToken
 };
