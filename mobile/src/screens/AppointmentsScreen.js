@@ -161,7 +161,7 @@ const AppointmentsScreen = ({ navigation }) => {
     // For patient, we want to show doctor name. For doctor, we want to show patient name.
     const displayName = isDoctor 
       ? (item.patient?.name || 'Patient') 
-      : `Dr. ${item.doctorProfile?.user?.name || 'Doctor'}`;
+      : (item.doctorProfile?.user?.name || 'Doctor');
        
     const displaySpecialty = isDoctor 
       ? 'Patient Consultation' 

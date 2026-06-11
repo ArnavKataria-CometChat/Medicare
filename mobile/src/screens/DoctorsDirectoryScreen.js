@@ -101,7 +101,7 @@ const DoctorsDirectoryScreen = ({ navigation }) => {
             <Text style={styles.avatarText}>{getInitials(item.user?.name)}</Text>
           </View>
           <View style={styles.headerInfo}>
-            <Text style={styles.docName}>Dr. {item.user?.name || 'Doctor'}</Text>
+            <Text style={styles.docName}>{item.user?.name || 'Doctor'}</Text>
             <View style={styles.specialtyBadge}>
               <Text style={styles.specialtyText}>{item.specialization}</Text>
             </View>
