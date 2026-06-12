@@ -37,6 +37,15 @@ app.use(express.urlencoded({ extended: true }));
 // Serve static uploads
 app.use('/uploads', express.static('uploads'));
 
+// Serve frontend static build in production
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+const publicPath = path.join(__dirname, 'public');
+app.use(express.static(publicPath));
+
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/profile', profileRoutes);
@@ -48,6 +57,18 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/chat', chatRoutes);
+
+// SPA fallback — serve index.html for non-API routes (frontend routing)
+app.get('*', (req, res, next) => {
+  // Skip API routes and socket.io
+  if (req.path.startsWith('/api') || req.path.startsWith('/socket.io')) {
+    return next();
+  }
+  const indexPath = path.join(publicPath, 'index.html');
+  res.sendFile(indexPath, (err) => {
+    if (err) next(); // If file doesn't exist, fall through to 404
+  });
+});
 
 // Error Handler
 app.use(errorHandler);
