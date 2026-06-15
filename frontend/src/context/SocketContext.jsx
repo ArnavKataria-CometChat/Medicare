@@ -5,7 +5,10 @@ import { useToast } from './ToastContext';
 
 const SocketContext = createContext(null);
 
-const SOCKET_URL = 'http://localhost:5000';
+// In production the frontend is served from the same origin as the backend
+// (behind nginx), so connect to the current origin. In dev, talk to the
+// local backend directly on port 5000.
+const SOCKET_URL = import.meta.env.PROD ? window.location.origin : 'http://localhost:5000';
 
 export const SocketProvider = ({ children, currentPath }) => {
   const { token, user } = useAuth();

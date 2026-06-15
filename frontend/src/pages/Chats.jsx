@@ -2,7 +2,10 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import io from 'socket.io-client';
 
-const SOCKET_URL = 'http://localhost:5000';
+// In production the frontend is served from the same origin as the backend
+// (behind nginx), so connect to the current origin. In dev, talk to the
+// local backend directly on port 5000.
+const SOCKET_URL = import.meta.env.PROD ? window.location.origin : 'http://localhost:5000';
 
 const Chats = ({ navigate }) => {
   const { user, token } = useAuth();
