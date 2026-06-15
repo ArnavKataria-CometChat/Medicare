@@ -179,6 +179,43 @@ certbot edits the nginx config to add TLS and redirect HTTP→HTTPS automaticall
 
 ---
 
+## Fronting with an AWS Application Load Balancer (ALB)
+
+When an ALB sits in front of the instance, TLS terminates at the ALB and traffic
+flows: `Browser → ALB (443) → EC2 nginx (80) → app (5000)`.
+
+### Target group
+- **Type:** Instances, **Protocol:** HTTP, **Port:** 80 (nginx).
+- **Health check path:** `/api/doctors` (returns 200), or `/`.
+- **Register** the EC2 instance.
+- **Stickiness:** only needed if you run **more than one** instance behind the ALB.
+  Socket.io's initial handshake can use HTTP long-polling, which must land on the
+  same target. Enable duration-based stickiness on the target group in that case.
+  For a single instance, leave it off.
+
+### Listeners
+- **HTTPS :443** with an ACM certificate → forward to the target group.
+- **HTTP :80** → redirect to HTTPS (301).
+
+### WebSockets / Socket.io
+ALB supports WebSockets natively — no special listener setting required. One
+gotcha: the ALB **idle timeout** defaults to 60s. Socket.io pings every ~25s so
+connections normally stay alive, but bumping the ALB idle timeout to 120–300s
+avoids edge-case disconnects.
+
+### Security group
+- **ALB SG:** allow inbound 80/443 from the internet (or your CIDRs).
+- **Instance SG:** allow inbound **80 only from the ALB's security group** (not
+  from the internet). Keep 5000/5432 closed to everything external. SSH (22) from
+  your IP only.
+
+### nginx
+The provided `deploy/nginx/medicare.conf` already honors the ALB's
+`X-Forwarded-Proto` header (via a `map`), so the app sees the real client protocol
+(https) even though the ALB→nginx hop is plain HTTP. `server_name _` matches the
+ALB/host header, so no change is needed there. After pulling the updated config,
+re-run `nginx -t && systemctl reload nginx`.
+
 ## Updating to a new version
 
 ```bash

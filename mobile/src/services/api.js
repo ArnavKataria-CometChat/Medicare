@@ -21,7 +21,9 @@ const getDefaultBaseUrl = () => {
     // For Android emulator, set MANUAL_IP to '10.0.2.2' above.
     return `http://${devIp}:5000`;
   }
-  return 'http://localhost:5000'; // Fallback
+  // Production: point at the public API behind the ALB (HTTPS, SSL terminated
+  // at the load balancer). Set EXPO_PUBLIC_API_URL at build time to override.
+  return process.env.EXPO_PUBLIC_API_URL || 'https://medicare.cometchat-staging.com';
 };
 
 export const API_BASE_URL = getDefaultBaseUrl();

@@ -9,8 +9,8 @@ services:
       POSTGRES_DB: ${DB_NAME:-medicare}
     volumes:
       - pgdata:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
+    # No host port mapping: Postgres is only reachable by the app over the
+    # internal compose network (hostname "db"). Never expose the DB to the host.
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
