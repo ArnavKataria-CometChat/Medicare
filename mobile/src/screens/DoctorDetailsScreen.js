@@ -72,7 +72,7 @@ const DoctorDetailsScreen = ({ route, navigation }) => {
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>{getInitials(doctor.user?.name)}</Text>
           </View>
-          <Text style={styles.docName}>Dr. {doctor.user?.name || 'Doctor'}</Text>
+          <Text style={styles.docName}>{doctor.user?.name || 'Doctor'}</Text>
           <View style={styles.specialtyBadge}>
             <Text style={styles.specialtyText}>{doctor.specialization}</Text>
           </View>
@@ -107,7 +107,7 @@ const DoctorDetailsScreen = ({ route, navigation }) => {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>About Doctor</Text>
           <Text style={styles.bioText}>
-            {doctor.bio || `Dr. ${doctor.user?.name} is a dedicated ${doctor.specialization} specialist committed to providing exceptional care. With over ${doctor.experienceYears} years of experience, Dr. ${doctor.user?.name} offers virtual health consultations, diagnosis, and personalized recovery programs.`}
+            {doctor.bio || `${doctor.user?.name} is a dedicated ${doctor.specialization} specialist committed to providing exceptional care. With over ${doctor.experienceYears} years of experience, ${doctor.user?.name} offers virtual health consultations, diagnosis, and personalized recovery programs.`}
           </Text>
         </View>
 

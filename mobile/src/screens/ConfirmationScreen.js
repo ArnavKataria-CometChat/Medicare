@@ -47,7 +47,7 @@ const ConfirmationScreen = ({ route, navigation }) => {
           <View style={styles.ticketBody}>
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Consultant</Text>
-              <Text style={styles.detailVal}>Dr. {doctorName}</Text>
+              <Text style={styles.detailVal}>{doctorName}</Text>
             </View>
 
             <View style={styles.detailRow}>

@@ -126,7 +126,7 @@ const HomeScreen = ({ navigation }) => {
         <View style={[styles.welcomeBanner, { backgroundColor: '#0f172a' }]}>
           <View style={styles.welcomeLeft}>
             <Text style={[styles.greeting, { color: '#94a3b8' }]}>Welcome back,</Text>
-            <Text style={[styles.userName, { color: '#ffffff' }]}>Dr. {user?.name || 'Doctor'}</Text>
+            <Text style={[styles.userName, { color: '#ffffff' }]}>{user?.name || 'Doctor'}</Text>
             <Text style={[styles.welcomeText, { color: '#cbd5e1' }]}>Clinical Consultant Portal</Text>
           </View>
           <View style={[styles.avatarContainer, { backgroundColor: '#0d9488' }]}>

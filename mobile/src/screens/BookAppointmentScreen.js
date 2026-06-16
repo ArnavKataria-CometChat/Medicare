@@ -153,7 +153,7 @@ const BookAppointmentScreen = ({ route, navigation }) => {
         <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
           <View style={styles.summaryCard}>
             <Text style={styles.summaryLabel}>Booking Consultation with</Text>
-            <Text style={styles.doctorName}>Dr. {doctorName}</Text>
+            <Text style={styles.doctorName}>{doctorName}</Text>
           </View>
 
           <View style={styles.formCard}>
