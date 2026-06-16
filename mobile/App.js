@@ -54,9 +54,9 @@ const PatientTabs = () => {
           backgroundColor: '#ffffff',
           borderTopWidth: 1,
           borderTopColor: '#e2e8f0',
-          paddingBottom: 6,
-          paddingTop: 6,
-          height: 60,
+          paddingBottom: 24,
+          paddingTop: 10,
+          height: 80,
         },
         headerStyle: {
           backgroundColor: '#ffffff',
@@ -116,9 +116,9 @@ const DoctorTabs = () => {
           backgroundColor: '#ffffff',
           borderTopWidth: 1,
           borderTopColor: '#e2e8f0',
-          paddingBottom: 6,
-          paddingTop: 6,
-          height: 60,
+          paddingBottom: 24,
+          paddingTop: 10,
+          height: 80,
         },
         headerStyle: {
           backgroundColor: '#ffffff',
@@ -323,7 +323,17 @@ const NavigationWrapper = () => {
             <Stack.Screen
               name="Appointments"
               component={AppointmentsScreen}
-              options={{ title: 'My Consultations' }}
+              options={({ navigation }) => ({
+                title: 'My Consultations',
+                headerLeft: () => (
+                  <TouchableOpacity
+                    onPress={() => navigation.navigate('MainTabs', { screen: 'Dashboard' })}
+                    style={{ marginRight: 8 }}
+                  >
+                    <Ionicons name="arrow-back" size={24} color="#0d9488" />
+                  </TouchableOpacity>
+                ),
+              })}
             />
 
           </>

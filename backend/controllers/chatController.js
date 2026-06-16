@@ -146,7 +146,7 @@ export const getChatContacts = async (req, res) => {
 
     if (userRole === 'PATIENT') {
       const appointments = await Appointment.findAll({
-        where: { patientId: userId, status: 'confirmed', chatRequestStatus: 'accepted' },
+        where: { patientId: userId, chatRequestStatus: 'accepted' },
         include: [{
           model: DoctorProfile,
           as: 'doctorProfile',
@@ -161,6 +161,9 @@ export const getChatContacts = async (req, res) => {
       const doctorMap = new Map();
       appointments.forEach(appt => {
         if (appt.doctorProfile?.user) {
+          const existing = doctorMap.get(appt.doctorProfile.user.id);
+          // If any appointment with this doctor is confirmed, mark as active
+          const isActive = appt.status === 'confirmed';
           doctorMap.set(appt.doctorProfile.user.id, {
             id: appt.doctorProfile.user.id,
             name: appt.doctorProfile.user.name,
@@ -168,6 +171,7 @@ export const getChatContacts = async (req, res) => {
             role: 'DOCTOR',
             specialization: appt.doctorProfile.specialization || null,
             imageUrl: appt.doctorProfile.imageUrl || null,
+            chatEnded: existing ? (existing.chatEnded && !isActive) : !isActive,
           });
         }
       });
@@ -177,7 +181,7 @@ export const getChatContacts = async (req, res) => {
       const doctorProfile = await DoctorProfile.findOne({ where: { userId } });
       if (doctorProfile) {
         const appointments = await Appointment.findAll({
-          where: { doctorProfileId: doctorProfile.id, status: 'confirmed', chatRequestStatus: 'accepted' },
+          where: { doctorProfileId: doctorProfile.id, chatRequestStatus: 'accepted' },
           include: [{
             model: User,
             as: 'patient',
@@ -188,6 +192,8 @@ export const getChatContacts = async (req, res) => {
         const patientMap = new Map();
         appointments.forEach(appt => {
           if (appt.patient) {
+            const existing = patientMap.get(appt.patient.id);
+            const isActive = appt.status === 'confirmed';
             patientMap.set(appt.patient.id, {
               id: appt.patient.id,
               name: appt.patient.name,
@@ -195,6 +201,7 @@ export const getChatContacts = async (req, res) => {
               role: 'PATIENT',
               specialization: null,
               imageUrl: null,
+              chatEnded: existing ? (existing.chatEnded && !isActive) : !isActive,
             });
           }
         });

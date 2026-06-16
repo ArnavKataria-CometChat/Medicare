@@ -15,6 +15,10 @@ if (!MANUAL_IP && Constants.expoConfig?.hostUri) {
 
 // Map appropriate base URL
 const getDefaultBaseUrl = () => {
+  // Allow env override in any mode
+  if (process.env.EXPO_PUBLIC_API_URL) {
+    return process.env.EXPO_PUBLIC_API_URL;
+  }
   if (__DEV__) {
     // Use the detected Metro host IP for both platforms.
     // This works for physical devices over Wi-Fi (Expo Go).

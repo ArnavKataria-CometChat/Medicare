@@ -1,4 +1,4 @@
-import { Appointment, User, DoctorProfile, NotificationLog, ActivityLog } from '../models/index.js';
+import { Appointment, User, DoctorProfile, NotificationLog, ActivityLog, Message } from '../models/index.js';
 import { sendPush } from '../services/pushService.js';
 import { sendExpoPush } from '../services/expoPushService.js';
 
@@ -208,6 +208,16 @@ export const cancelAppointment = async (req, res, next) => {
 
     appointment.status = 'cancelled';
     await appointment.save();
+
+    // If chat was accepted, send a system message indicating chat has ended
+    if (appointment.chatRequestStatus === 'accepted') {
+      await Message.create({
+        senderId: req.user.id,
+        receiverId: isPatient ? appointment.doctorProfile.user.id : appointment.patientId,
+        content: 'This consultation has been cancelled. Chat has ended.',
+        messageType: 'system'
+      });
+    }
 
     const dateStr = appointment.appointmentDate;
     const timeStr = appointment.appointmentTime;

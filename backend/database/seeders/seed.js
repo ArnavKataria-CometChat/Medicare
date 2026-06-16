@@ -20,7 +20,7 @@ const seedDatabase = async () => {
     const admins = await User.bulkCreate([
       {
         name: 'Primary Admin',
-        email: 'admin@medicare.com',
+        email: 'admin.1@medicare.com',
         password: 'Admin@123',
         phone: '5550192834',
         role: 'ADMIN',

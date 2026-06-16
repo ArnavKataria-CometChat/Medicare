@@ -185,77 +185,102 @@ const Appointments = ({ navigate }) => {
                           {appt.status}
                         </span>
                       </td>
-                      <td style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                        {!isPatient && appt.status === 'confirmed' && (
-                          <button
-                            onClick={() => navigate(`/patients/${appt.patientId}`)}
-                            className="btn btn-secondary btn-sm"
-                          >
-                            View Records
-                          </button>
-                        )}
-                        {appt.status === 'confirmed' && (
-                          <button
-                            onClick={() => handleCancel(appt.id)}
-                            className="btn btn-danger btn-sm"
-                          >
-                            Cancel
-                          </button>
-                        )}
-                        {/* Patient: Request Chat button */}
-                        {isPatient && appt.status === 'confirmed' && appt.chatRequestStatus === 'none' && (
-                          <button
-                            onClick={() => handleRequestChat(appt.id)}
-                            className="btn btn-primary btn-sm"
-                          >
-                            Request Chat
-                          </button>
-                        )}
-                        {isPatient && appt.chatRequestStatus === 'pending' && (
-                          <span className="badge badge-warning" style={{ padding: '0.4rem 0.75rem', fontSize: '0.75rem' }}>Chat Pending</span>
-                        )}
-                        {isPatient && appt.chatRequestStatus === 'accepted' && (
-                          <button
-                            onClick={() => navigate('/chats')}
-                            className="btn btn-primary btn-sm"
-                            style={{ background: '#10b981' }}
-                          >
-                            Chat Now
-                          </button>
-                        )}
-                        {isPatient && appt.chatRequestStatus === 'declined' && (
-                          <span className="badge badge-danger" style={{ padding: '0.4rem 0.75rem', fontSize: '0.75rem' }}>Chat Declined</span>
-                        )}
-                        {/* Doctor: Accept/Decline buttons */}
-                        {!isPatient && appt.chatRequestStatus === 'pending' && (
-                          <>
-                            <button
-                              onClick={() => handleAcceptChat(appt.id)}
-                              className="btn btn-sm"
-                              style={{ background: '#10b981', color: 'white', border: 'none' }}
-                            >
-                              Accept Chat
-                            </button>
-                            <button
-                              onClick={() => handleDeclineChat(appt.id)}
-                              className="btn btn-danger btn-sm"
-                            >
-                              Decline
-                            </button>
-                          </>
-                        )}
-                        {!isPatient && appt.chatRequestStatus === 'accepted' && (
-                          <button
-                            onClick={() => navigate('/chats')}
-                            className="btn btn-primary btn-sm"
-                            style={{ background: '#10b981' }}
-                          >
-                            Chat Now
-                          </button>
-                        )}
-                        {appt.status === 'cancelled' && (
-                          <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>No actions</span>
-                        )}
+                      <td>
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                          {/* Container 1: Records & Cancel */}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', padding: '0.4rem 0.6rem', background: 'var(--bg-secondary, #f8fafc)', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                            {!isPatient && (
+                              <button
+                                onClick={() => navigate(`/patients/${appt.patientId}`)}
+                                className="btn btn-secondary btn-sm"
+                                style={{ fontSize: '0.75rem', whiteSpace: 'nowrap' }}
+                              >
+                                View Records
+                              </button>
+                            )}
+                            {appt.status === 'confirmed' ? (
+                              <button
+                                onClick={() => handleCancel(appt.id)}
+                                className="btn btn-danger btn-sm"
+                                style={{ fontSize: '0.75rem' }}
+                              >
+                                Cancel
+                              </button>
+                            ) : (
+                              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textAlign: 'center' }}>Cancelled</span>
+                            )}
+                          </div>
+
+                          {/* Container 2: Chat Actions */}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', padding: '0.4rem 0.6rem', background: 'var(--bg-secondary, #f8fafc)', borderRadius: '8px', border: '1px solid #e2e8f0', minWidth: '90px', alignItems: 'center', justifyContent: 'center' }}>
+                            {appt.status === 'cancelled' ? (
+                              <span style={{ fontSize: '0.7rem', color: '#94a3b8', textAlign: 'center' }}>Chat ended</span>
+                            ) : (
+                              <>
+                                {/* Patient chat actions */}
+                                {isPatient && appt.chatRequestStatus === 'none' && (
+                                  <button
+                                    onClick={() => handleRequestChat(appt.id)}
+                                    className="btn btn-primary btn-sm"
+                                    style={{ fontSize: '0.75rem', whiteSpace: 'nowrap' }}
+                                  >
+                                    Request Chat
+                                  </button>
+                                )}
+                                {isPatient && appt.chatRequestStatus === 'pending' && (
+                                  <span className="badge badge-warning" style={{ padding: '0.3rem 0.6rem', fontSize: '0.7rem' }}>Pending</span>
+                                )}
+                                {isPatient && appt.chatRequestStatus === 'accepted' && (
+                                  <button
+                                    onClick={() => navigate('/chats')}
+                                    className="btn btn-sm"
+                                    style={{ background: '#10b981', color: 'white', border: 'none', fontSize: '0.75rem' }}
+                                  >
+                                    Chat Now
+                                  </button>
+                                )}
+                                {isPatient && appt.chatRequestStatus === 'declined' && (
+                                  <span className="badge badge-danger" style={{ padding: '0.3rem 0.6rem', fontSize: '0.7rem' }}>Declined</span>
+                                )}
+
+                                {/* Doctor chat actions */}
+                                {!isPatient && appt.chatRequestStatus === 'none' && (
+                                  <span style={{ fontSize: '0.7rem', color: '#94a3b8', textAlign: 'center' }}>No request</span>
+                                )}
+                                {!isPatient && appt.chatRequestStatus === 'pending' && (
+                                  <>
+                                    <button
+                                      onClick={() => handleAcceptChat(appt.id)}
+                                      className="btn btn-sm"
+                                      style={{ background: '#10b981', color: 'white', border: 'none', fontSize: '0.75rem' }}
+                                    >
+                                      Accept
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeclineChat(appt.id)}
+                                      className="btn btn-danger btn-sm"
+                                      style={{ fontSize: '0.75rem' }}
+                                    >
+                                      Decline
+                                    </button>
+                                  </>
+                                )}
+                                {!isPatient && appt.chatRequestStatus === 'accepted' && (
+                                  <button
+                                    onClick={() => navigate('/chats')}
+                                    className="btn btn-sm"
+                                    style={{ background: '#10b981', color: 'white', border: 'none', fontSize: '0.75rem' }}
+                                  >
+                                    Chat Now
+                                  </button>
+                                )}
+                                {!isPatient && appt.chatRequestStatus === 'declined' && (
+                                  <span style={{ fontSize: '0.7rem', color: '#94a3b8', textAlign: 'center' }}>Declined</span>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        </div>
                       </td>
                     </tr>
                   );

@@ -1,6 +1,7 @@
 import { Server } from 'socket.io';
 import jwt from 'jsonwebtoken';
-import { Message, User, NotificationLog } from '../models/index.js';
+import { Op } from 'sequelize';
+import { Message, User, NotificationLog, Appointment, DoctorProfile } from '../models/index.js';
 import { sendPush } from '../services/pushService.js';
 import { sendExpoPush } from '../services/expoPushService.js';
 
@@ -63,6 +64,32 @@ export const initializeSocket = (httpServer) => {
 
         if (!receiverId || !content?.trim()) {
           if (callback) callback({ error: 'receiverId and content are required' });
+          return;
+        }
+
+        // Check if chat is allowed (any active appointment with accepted chat between these users)
+        const senderDoctorProfile = await DoctorProfile.findOne({ where: { userId } });
+        const receiverDoctorProfile = await DoctorProfile.findOne({ where: { userId: receiverId } });
+        
+        let hasActiveChat = false;
+        
+        // Check as patient->doctor
+        if (receiverDoctorProfile) {
+          const appt = await Appointment.findOne({
+            where: { patientId: userId, doctorProfileId: receiverDoctorProfile.id, status: 'confirmed', chatRequestStatus: 'accepted' }
+          });
+          if (appt) hasActiveChat = true;
+        }
+        // Check as doctor->patient
+        if (!hasActiveChat && senderDoctorProfile) {
+          const appt = await Appointment.findOne({
+            where: { patientId: receiverId, doctorProfileId: senderDoctorProfile.id, status: 'confirmed', chatRequestStatus: 'accepted' }
+          });
+          if (appt) hasActiveChat = true;
+        }
+
+        if (!hasActiveChat) {
+          if (callback) callback({ error: 'This chat has ended. No active appointment.' });
           return;
         }
 

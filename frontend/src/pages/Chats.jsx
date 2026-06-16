@@ -142,17 +142,37 @@ const Chats = ({ navigate }) => {
       if (contactsRes.ok) {
         const contactsData = await contactsRes.json();
         setContacts(contactsData);
+        // Query initial online status for all contacts
+        if (socket) {
+          contactsData.forEach(contact => {
+            socket.emit('user:status', { targetUserId: contact.id }, (response) => {
+              if (response) {
+                setOnlineUsers(prev => ({ ...prev, [contact.id]: response.online }));
+              }
+            });
+          });
+        }
       }
       if (convsRes.ok) {
         const convsData = await convsRes.json();
         setConversations(convsData);
+        // Also query online status for conversation contacts
+        if (socket) {
+          convsData.forEach(conv => {
+            socket.emit('user:status', { targetUserId: conv.id }, (response) => {
+              if (response) {
+                setOnlineUsers(prev => ({ ...prev, [conv.id]: response.online }));
+              }
+            });
+          });
+        }
       }
     } catch (err) {
       console.error('[Chat] Error fetching contacts:', err);
     } finally {
       setLoadingContacts(false);
     }
-  }, [token]);
+  }, [token, socket]);
 
   useEffect(() => {
     fetchContacts();
@@ -183,6 +203,15 @@ const Chats = ({ navigate }) => {
     setMessages([]);
     setTyping(null);
     setLoadingMessages(true);
+
+    // Query current online status of the selected contact
+    if (socket) {
+      socket.emit('user:status', { targetUserId: contact.id }, (response) => {
+        if (response) {
+          setOnlineUsers(prev => ({ ...prev, [contact.id]: response.online }));
+        }
+      });
+    }
 
     try {
       const res = await fetch(`/api/chat/messages/${contact.id}`, {
@@ -277,8 +306,12 @@ const Chats = ({ navigate }) => {
   // Merge contacts and conversations into a unified list
   const allContacts = [...conversations];
   contacts.forEach(contact => {
-    if (!allContacts.find(c => c.id === contact.id)) {
-      allContacts.push({ ...contact, lastMessage: null, unreadCount: 0 });
+    const existing = allContacts.find(c => c.id === contact.id);
+    if (existing) {
+      // Carry over chatEnded from contacts API
+      existing.chatEnded = contact.chatEnded || false;
+    } else {
+      allContacts.push({ ...contact, lastMessage: null, unreadCount: 0, chatEnded: contact.chatEnded || false });
     }
   });
 
@@ -526,6 +559,22 @@ const Chats = ({ navigate }) => {
           font-style: italic;
         }
 
+        .chat-msg-row.system {
+          align-self: center;
+          max-width: 80%;
+        }
+
+        .chat-msg-system {
+          background: #f1f5f9;
+          border: 1px solid #e2e8f0;
+          border-radius: 12px;
+          padding: 0.5rem 1rem;
+          font-size: 0.78rem;
+          color: #64748b;
+          text-align: center;
+          font-style: italic;
+        }
+
         .chat-input-bar {
           padding: 1rem 1.5rem;
           border-top: 1px solid #e2e8f0;
@@ -765,12 +814,18 @@ const Chats = ({ navigate }) => {
                 messages.map(msg => (
                   <div
                     key={msg.id}
-                    className={`chat-msg-row ${msg.senderId === user.id ? 'sent' : 'received'}`}
+                    className={`chat-msg-row ${msg.messageType === 'system' ? 'system' : (msg.senderId === user.id ? 'sent' : 'received')}`}
                   >
-                    <div className="chat-msg-meta">
-                      {msg.sender?.name || (msg.senderId === user.id ? user.name : selectedContact.name)} • {formatTime(msg.createdAt)}
-                    </div>
-                    <div className="chat-msg-bubble">{msg.content}</div>
+                    {msg.messageType === 'system' ? (
+                      <div className="chat-msg-system">{msg.content}</div>
+                    ) : (
+                      <>
+                        <div className="chat-msg-meta">
+                          {msg.sender?.name || (msg.senderId === user.id ? user.name : selectedContact.name)} • {formatTime(msg.createdAt)}
+                        </div>
+                        <div className="chat-msg-bubble">{msg.content}</div>
+                      </>
+                    )}
                   </div>
                 ))
               )}
@@ -783,26 +838,32 @@ const Chats = ({ navigate }) => {
             </div>
 
             {/* Input */}
-            <form className="chat-input-bar" onSubmit={handleSend}>
-              <input
-                type="text"
-                className="chat-input-field"
-                placeholder={`Message ${selectedContact.name}...`}
-                value={textVal}
-                onChange={handleInputChange}
-                autoFocus
-              />
-              <button 
-                type="submit" 
-                className="chat-send-btn"
-                disabled={!textVal.trim()}
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <line x1="22" y1="2" x2="11" y2="13" />
-                  <polygon points="22 2 15 22 11 13 2 9 22 2" />
-                </svg>
-              </button>
-            </form>
+            {selectedContact.chatEnded ? (
+              <div className="chat-input-bar" style={{ justifyContent: 'center', background: '#f1f5f9' }}>
+                <span style={{ color: '#94a3b8', fontSize: '0.85rem', fontWeight: '500' }}>This chat has ended — appointment was cancelled</span>
+              </div>
+            ) : (
+              <form className="chat-input-bar" onSubmit={handleSend}>
+                <input
+                  type="text"
+                  className="chat-input-field"
+                  placeholder={`Message ${selectedContact.name}...`}
+                  value={textVal}
+                  onChange={handleInputChange}
+                  autoFocus
+                />
+                <button 
+                  type="submit" 
+                  className="chat-send-btn"
+                  disabled={!textVal.trim()}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <line x1="22" y1="2" x2="11" y2="13" />
+                    <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                  </svg>
+                </button>
+              </form>
+            )}
           </>
         )}
       </div>

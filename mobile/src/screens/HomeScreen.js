@@ -80,7 +80,7 @@ const HomeScreen = ({ navigation }) => {
 
           <TouchableOpacity
             style={styles.actionCard}
-            onPress={() => navigation.navigate('MainTabs', { screen: 'Appointments' })}
+            onPress={() => navigation.navigate('Appointments')}
             activeOpacity={0.9}
           >
             <View style={[styles.iconBox, { backgroundColor: '#fef3c7' }]}>

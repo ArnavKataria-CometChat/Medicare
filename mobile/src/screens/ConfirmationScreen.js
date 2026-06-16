@@ -88,8 +88,8 @@ const ConfirmationScreen = ({ route, navigation }) => {
         <TouchableOpacity
           style={styles.actionBtn}
           onPress={() => {
-            // Navigate back to home/appointments dashboard
-            navigation.navigate('MainTabs', { screen: 'Appointments' });
+            // Navigate to the Appointments stack screen
+            navigation.navigate('Appointments');
           }}
         >
           <Text style={styles.actionBtnText}>Go to Appointments</Text>

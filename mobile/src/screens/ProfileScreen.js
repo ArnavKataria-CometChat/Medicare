@@ -7,14 +7,18 @@ import {
   ScrollView,
   SafeAreaView,
   Alert,
-  ActivityIndicator
+  ActivityIndicator,
+  Switch
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { AuthContext } from '../context/AuthContext';
+import { api } from '../services/api';
 
 const ProfileScreen = () => {
   const { user, logout } = useContext(AuthContext);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [isAvailable, setIsAvailable] = useState(user?.doctorProfile?.isAvailable ?? true);
+  const [togglingAvailability, setTogglingAvailability] = useState(false);
 
   const getInitials = (name) => {
     if (!name) return 'U';
@@ -54,6 +58,20 @@ const ProfileScreen = () => {
 
   const isDoctor = user?.role === 'DOCTOR';
 
+  const handleAvailabilityToggle = async (newValue) => {
+    setIsAvailable(newValue);
+    setTogglingAvailability(true);
+    try {
+      await api.updateProfile({ isAvailable: newValue });
+    } catch (err) {
+      // Revert on failure
+      setIsAvailable(!newValue);
+      Alert.alert('Error', 'Failed to update availability status.');
+    } finally {
+      setTogglingAvailability(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
@@ -67,6 +85,33 @@ const ProfileScreen = () => {
             <Text style={styles.roleText}>{user?.role || 'PATIENT'}</Text>
           </View>
         </View>
+
+        {/* Availability Toggle for Doctors */}
+        {isDoctor && (
+          <View style={styles.availabilityCard}>
+            <View style={styles.availabilityLeft}>
+              <Ionicons 
+                name={isAvailable ? "radio-button-on" : "radio-button-off"} 
+                size={20} 
+                color={isAvailable ? "#10b981" : "#ef4444"} 
+              />
+              <View style={styles.availabilityTextContainer}>
+                <Text style={styles.availabilityLabel}>AVAILABILITY</Text>
+                <Text style={[styles.availabilityStatus, { color: isAvailable ? '#059669' : '#dc2626' }]}>
+                  {isAvailable ? 'ONLINE (Accepting Bookings)' : 'OFFLINE (Not Accepting)'}
+                </Text>
+              </View>
+            </View>
+            <Switch
+              value={isAvailable}
+              onValueChange={handleAvailabilityToggle}
+              disabled={togglingAvailability}
+              trackColor={{ false: '#fecaca', true: '#a7f3d0' }}
+              thumbColor={isAvailable ? '#10b981' : '#ef4444'}
+              ios_backgroundColor="#fecaca"
+            />
+          </View>
+        )}
 
         {/* Info Section */}
         <View style={styles.infoSection}>
@@ -272,6 +317,41 @@ const styles = StyleSheet.create({
     color: '#ef4444',
     fontSize: 15,
     fontWeight: '700',
+  },
+  availabilityCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    marginBottom: 20,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.02,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  availabilityLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  availabilityTextContainer: {
+    marginLeft: 12,
+  },
+  availabilityLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#64748b',
+    letterSpacing: 1,
+  },
+  availabilityStatus: {
+    fontSize: 13,
+    fontWeight: '700',
+    marginTop: 2,
   },
 });
 

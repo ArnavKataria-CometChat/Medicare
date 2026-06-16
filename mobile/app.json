@@ -1,8 +1,13 @@
 {
   "expo": {
     "name": "MediCare",
-    "slug": "medicare-mobile",
+    "slug": "medicare-root",
     "version": "1.0.0",
+    "extra": {
+      "eas": {
+        "projectId": "ede4583f-5082-487f-9816-6762a1c4c89b"
+      }
+    },
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -13,17 +18,27 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.medivantra.medicare"
+      "bundleIdentifier": "com.cometchat.medicare",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#f8fafc"
       },
-      "package": "com.medivantra.medicare"
+      "package": "com.cometchat.medicare",
+      "googleServicesFile": "./google-services.json",
+      "runtimeVersion": {
+        "policy": "appVersion"
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/ede4583f-5082-487f-9816-6762a1c4c89b"
     }
   }
 }
