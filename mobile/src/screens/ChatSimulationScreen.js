@@ -26,6 +26,7 @@ const ChatSimulationScreen = ({ route, navigation }) => {
   const [loading, setLoading] = useState(true);
   const [typing, setTyping] = useState(null);
   const [isOnline, setIsOnline] = useState(false);
+  const chatEnded = contact?.chatEnded || false;
   
   const socketRef = useRef(null);
   const flatListRef = useRef(null);
@@ -193,6 +194,17 @@ const ChatSimulationScreen = ({ route, navigation }) => {
   };
 
   const renderMessage = ({ item }) => {
+    // System/background messages
+    if (item.messageType === 'system') {
+      return (
+        <View style={styles.systemMsgRow}>
+          <View style={styles.systemMsgBubble}>
+            <Text style={styles.systemMsgText}>{item.content}</Text>
+          </View>
+        </View>
+      );
+    }
+
     const isMine = item.senderId === user?.id;
     return (
       <View style={[styles.msgRow, isMine ? styles.msgRowSent : styles.msgRowReceived]}>
@@ -260,24 +272,31 @@ const ChatSimulationScreen = ({ route, navigation }) => {
         />
 
         {/* Input Bar */}
-        <View style={styles.inputBar}>
-          <TextInput
-            style={styles.input}
-            placeholder={`Message ${contact.name}...`}
-            placeholderTextColor="#94a3b8"
-            value={inputText}
-            onChangeText={handleInputChange}
-            multiline
-            maxLength={1000}
-          />
-          <TouchableOpacity
-            style={[styles.sendBtn, !inputText.trim() && styles.sendBtnDisabled]}
-            onPress={handleSendMessage}
-            disabled={!inputText.trim()}
-          >
-            <Ionicons name="send" size={20} color="#ffffff" />
-          </TouchableOpacity>
-        </View>
+        {chatEnded ? (
+          <View style={styles.chatEndedBar}>
+            <Ionicons name="lock-closed-outline" size={16} color="#94a3b8" />
+            <Text style={styles.chatEndedText}>This chat has ended — appointment was cancelled</Text>
+          </View>
+        ) : (
+          <View style={styles.inputBar}>
+            <TextInput
+              style={styles.input}
+              placeholder={`Message ${contact.name}...`}
+              placeholderTextColor="#94a3b8"
+              value={inputText}
+              onChangeText={handleInputChange}
+              multiline
+              maxLength={1000}
+            />
+            <TouchableOpacity
+              style={[styles.sendBtn, !inputText.trim() && styles.sendBtnDisabled]}
+              onPress={handleSendMessage}
+              disabled={!inputText.trim()}
+            >
+              <Ionicons name="send" size={20} color="#ffffff" />
+            </TouchableOpacity>
+          </View>
+        )}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -437,6 +456,41 @@ const styles = StyleSheet.create({
   emptyMessagesText: {
     fontSize: 14,
     color: '#94a3b8',
+  },
+  systemMsgRow: {
+    alignSelf: 'center',
+    marginBottom: 12,
+    maxWidth: '80%',
+  },
+  systemMsgBubble: {
+    backgroundColor: '#f1f5f9',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+  },
+  systemMsgText: {
+    fontSize: 12,
+    color: '#64748b',
+    textAlign: 'center',
+    fontStyle: 'italic',
+  },
+  chatEndedBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: '#f1f5f9',
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
+    gap: 8,
+  },
+  chatEndedText: {
+    fontSize: 13,
+    color: '#94a3b8',
+    fontWeight: '500',
   },
 });
 

@@ -367,7 +367,7 @@
 					"-lc++",
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_DEBUG";
-				PRODUCT_BUNDLE_IDENTIFIER = com.cometchat.medicare;
+				PRODUCT_BUNDLE_IDENTIFIER = com.cometchat.interns;
 				PRODUCT_NAME = MediCare;
 				SWIFT_OBJC_BRIDGING_HEADER = "MediCare/MediCare-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -385,7 +385,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = MediCare/MediCare.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 3RU3RRFTRM;
+				DEVELOPMENT_TEAM = T9F7QDSC2S;
 				INFOPLIST_FILE = MediCare/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -399,7 +399,7 @@
 					"-lc++",
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_RELEASE";
-				PRODUCT_BUNDLE_IDENTIFIER = com.cometchat.medicare;
+				PRODUCT_BUNDLE_IDENTIFIER = com.cometchat.interns;
 				PRODUCT_NAME = MediCare;
 				SWIFT_OBJC_BRIDGING_HEADER = "MediCare/MediCare-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;

@@ -1,6 +1,6 @@
 import { Appointment, User, DoctorProfile, NotificationLog, ActivityLog, Message } from '../models/index.js';
 import { sendPush } from '../services/pushService.js';
-import { sendExpoPush } from '../services/expoPushService.js';
+import { sendExpoPush } from '../services/firebasePushService.js';
 
 export const getAppointments = async (req, res, next) => {
   try {

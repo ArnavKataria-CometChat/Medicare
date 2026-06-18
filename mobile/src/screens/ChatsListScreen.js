@@ -60,8 +60,11 @@ const ChatsListScreen = ({ navigation }) => {
   // Merge contacts and conversations
   const allContacts = [...conversations];
   contacts.forEach(contact => {
-    if (!allContacts.find(c => c.id === contact.id)) {
-      allContacts.push({ ...contact, lastMessage: null, unreadCount: 0 });
+    const existing = allContacts.find(c => c.id === contact.id);
+    if (existing) {
+      existing.chatEnded = contact.chatEnded || false;
+    } else {
+      allContacts.push({ ...contact, lastMessage: null, unreadCount: 0, chatEnded: contact.chatEnded || false });
     }
   });
 

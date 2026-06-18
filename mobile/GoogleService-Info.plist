@@ -9,7 +9,7 @@
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
-	<string>com.cometchat.medicare</string>
+	<string>com.cometchat.interns</string>
 	<key>PROJECT_ID</key>
 	<string>medicare-89e38</string>
 	<key>STORAGE_BUCKET</key>
@@ -25,6 +25,6 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:599783219960:ios:1812176efa045b8ef3510d</string>
+	<string>1:599783219960:ios:b458aa160c9243fbf3510d</string>
 </dict>
 </plist>

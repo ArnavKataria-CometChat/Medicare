@@ -3,18 +3,26 @@ import jwt from 'jsonwebtoken';
 import { Op } from 'sequelize';
 import { Message, User, NotificationLog, Appointment, DoctorProfile } from '../models/index.js';
 import { sendPush } from '../services/pushService.js';
-import { sendExpoPush } from '../services/expoPushService.js';
+import { sendExpoPush } from '../services/firebasePushService.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'medicare_super_secret_key_123';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  console.error('FATAL: JWT_SECRET environment variable is not set!');
+  process.exit(1);
+}
 
 // Track online users: userId -> Set of socket IDs
 const onlineUsers = new Map();
 
 export const initializeSocket = (httpServer) => {
+  const isProduction = process.env.NODE_ENV === 'production';
   const io = new Server(httpServer, {
     cors: {
-      origin: '*',
-      methods: ['GET', 'POST']
+      origin: isProduction
+        ? (process.env.CORS_ORIGIN || '*')
+        : '*',
+      methods: ['GET', 'POST'],
+      credentials: true,
     }
   });
 

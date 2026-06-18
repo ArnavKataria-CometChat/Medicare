@@ -1,6 +1,4 @@
 import webpush from 'web-push';
-import fs from 'fs';
-import path from 'path';
 import dotenv from 'dotenv';
 import { PushSubscription } from '../models/index.js';
 
@@ -10,32 +8,27 @@ let publicKey = process.env.VAPID_PUBLIC_KEY;
 let privateKey = process.env.VAPID_PRIVATE_KEY;
 
 if (!publicKey || !privateKey) {
-  console.log('VAPID keys not found in environment. Generating new ones...');
-  const keys = webpush.generateVAPIDKeys();
-  publicKey = keys.publicKey;
-  privateKey = keys.privateKey;
-  
-  // Write/append to .env in backend directory
-  const envPath = path.resolve(process.cwd(), '.env');
-  const envContent = `\nVAPID_PUBLIC_KEY=${publicKey}\nVAPID_PRIVATE_KEY=${privateKey}\n`;
-  try {
-    fs.appendFileSync(envPath, envContent);
-    console.log(`Successfully persisted generated VAPID keys to ${envPath}`);
-  } catch (err) {
-    console.error('Failed to write VAPID keys to .env:', err.message);
-  }
+  console.warn('[PushService] VAPID keys not found in environment. Web push notifications will not work.');
+  console.warn('[PushService] Generate keys with: npx web-push generate-vapid-keys');
+  console.warn('[PushService] Then set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY in your .env');
 }
 
-webpush.setVapidDetails(
-  'mailto:support@medicare.com',
-  publicKey,
-  privateKey
-);
+if (publicKey && privateKey) {
+  webpush.setVapidDetails(
+    'mailto:support@medicare.com',
+    publicKey,
+    privateKey
+  );
+}
 
 export { publicKey };
 
 export const sendPush = async (userId, title, body, url = '/dashboard') => {
   try {
+    if (!publicKey || !privateKey) {
+      return { success: false, error: 'VAPID keys not configured' };
+    }
+
     const subscriptions = await PushSubscription.findAll({ where: { userId } });
     if (!subscriptions || subscriptions.length === 0) {
       return { success: true, count: 0 };

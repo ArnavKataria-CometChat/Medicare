@@ -22,6 +22,12 @@ dotenv.config();
 const app = express();
 const server = http.createServer(app);
 const PORT = process.env.PORT || 5000;
+const isProduction = process.env.NODE_ENV === 'production';
+
+// Trust proxy (required behind nginx/ALB for correct req.ip and X-Forwarded-*)
+if (isProduction) {
+  app.set('trust proxy', 1);
+}
 
 // Initialize Socket.io
 const { io, sendSocketNotification } = initializeSocket(server);
@@ -30,8 +36,14 @@ const { io, sendSocketNotification } = initializeSocket(server);
 app.locals.sendSocketNotification = sendSocketNotification;
 
 // Middleware
-app.use(cors());
-app.use(express.json());
+const corsOptions = {
+  origin: isProduction
+    ? (process.env.CORS_ORIGIN || '*')  // Set CORS_ORIGIN in .env for production
+    : '*',
+  credentials: true,
+};
+app.use(cors(corsOptions));
+app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // Serve static uploads
@@ -79,12 +91,17 @@ const startServer = async () => {
     await sequelize.authenticate();
     console.log('Database connected successfully.');
 
-    // Sync models to ensure new columns/tables are created
-    await sequelize.sync({ alter: true });
+    // In production, only sync without alter to avoid accidental schema changes.
+    // Run migrations manually for schema updates in production.
+    if (isProduction) {
+      await sequelize.sync();
+    } else {
+      await sequelize.sync({ alter: true });
+    }
     console.log('Database models synced.');
 
     server.listen(PORT, () => {
-      console.log(`MediCare backend server running on port ${PORT}`);
+      console.log(`MediCare backend server running on port ${PORT} (${isProduction ? 'production' : 'development'})`);
       console.log(`Socket.io ready for real-time connections`);
     });
   } catch (error) {

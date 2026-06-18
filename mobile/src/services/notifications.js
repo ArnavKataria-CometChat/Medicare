@@ -6,11 +6,11 @@ import Constants from 'expo-constants';
 import { API_BASE_URL } from './api';
 
 // Configure how notifications appear when app is in foreground
-// Wrap in try/catch for Expo Go compatibility
 try {
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
-      shouldShowAlert: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
       shouldPlaySound: true,
       shouldSetBadge: true,
     }),
@@ -20,7 +20,7 @@ try {
 }
 
 /**
- * Register for push notifications and send token to backend
+ * Register for push notifications and send FCM/APNs token to backend
  */
 export const registerForPushNotifications = async () => {
   try {
@@ -45,25 +45,27 @@ export const registerForPushNotifications = async () => {
       return null;
     }
 
-    // Get project ID from Constants
-    const projectId = Constants.expoConfig?.extra?.eas?.projectId 
-      || Constants.easConfig?.projectId
-      || undefined;
-
-    // Get Expo push token
+    // Get the native device push token (FCM token on Android, APNs token on iOS)
     let pushToken;
     try {
-      const tokenData = await Notifications.getExpoPushTokenAsync({
-        projectId
-      });
+      const tokenData = await Notifications.getDevicePushTokenAsync();
       pushToken = tokenData.data;
-      console.log('[Notifications] Expo push token:', pushToken);
+      console.log(`[Notifications] FCM/APNs device token (${tokenData.type}):`, pushToken.substring(0, 30) + '...');
     } catch (tokenError) {
-      // In Expo Go (SDK 53+), remote notifications aren't supported
-      // Fall back to local notifications only
-      console.warn('[Notifications] Could not get push token (Expo Go limitation):', tokenError.message);
-      console.log('[Notifications] Local notifications will still work. For remote push, use a development build.');
-      return null;
+      console.warn('[Notifications] Could not get device push token:', tokenError.message);
+      
+      // Fallback: try Expo push token (works in dev builds)
+      try {
+        const projectId = Constants.expoConfig?.extra?.eas?.projectId 
+          || Constants.easConfig?.projectId
+          || undefined;
+        const expoTokenData = await Notifications.getExpoPushTokenAsync({ projectId });
+        pushToken = expoTokenData.data;
+        console.log('[Notifications] Fallback to Expo push token:', pushToken);
+      } catch (fallbackError) {
+        console.warn('[Notifications] Could not get any push token:', fallbackError.message);
+        return null;
+      }
     }
 
     // Set up Android notification channel
@@ -103,7 +105,7 @@ export const registerForPushNotifications = async () => {
 };
 
 /**
- * Send the Expo push token to the backend
+ * Send the push token to the backend
  */
 const sendTokenToBackend = async (pushToken, authToken) => {
   try {
@@ -120,7 +122,7 @@ const sendTokenToBackend = async (pushToken, authToken) => {
     });
 
     if (response.ok) {
-      console.log('[Notifications] Token registered with backend');
+      console.log('[Notifications] Token registered with backend (Firebase FCM)');
     } else {
       const err = await response.json().catch(() => ({}));
       console.error('[Notifications] Failed to register token:', err);
