@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "599783219960",
+    "project_id": "medicare-89e38",
+    "storage_bucket": "medicare-89e38.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:599783219960:android:3cabb7c17bee4789f3510d",
+        "android_client_info": {
+          "package_name": "com.cometchat.medicare"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyArvFVzyack-yrqmdMjS3SBhWfq-BdVtDA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

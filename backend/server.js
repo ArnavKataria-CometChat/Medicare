@@ -14,8 +14,12 @@ import adminRoutes from './routes/adminRoutes.js';
 import aiRoutes from './routes/aiRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
 import chatRoutes from './routes/chatRoutes.js';
+import cometchatRoutes from './routes/cometchatRoutes.js';
+import webhookRoutes from './routes/webhookRoutes.js';
+import adminCometChatRoutes from './routes/adminCometChatRoutes.js';
 import { errorHandler } from './middleware/errorMiddleware.js';
 import { initializeSocket } from './config/socket.js';
+import { initializeCometChatRoles } from './services/cometchatService.js';
 
 dotenv.config();
 
@@ -69,6 +73,9 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/cometchat', cometchatRoutes);
+app.use('/api/webhooks', webhookRoutes);
+app.use('/api/admin', adminCometChatRoutes);
 
 // SPA fallback — serve index.html for non-API routes (frontend routing)
 app.get('*', (req, res, next) => {
@@ -103,6 +110,11 @@ const startServer = async () => {
     server.listen(PORT, () => {
       console.log(`MediCare backend server running on port ${PORT} (${isProduction ? 'production' : 'development'})`);
       console.log(`Socket.io ready for real-time connections`);
+
+      // Initialize CometChat roles in background (non-blocking)
+      initializeCometChatRoles().catch((err) => {
+        console.error('[CometChat] Role initialization failed:', err.message);
+      });
     });
   } catch (error) {
     console.error('Unable to connect to database or start server:', error);

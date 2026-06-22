@@ -22,7 +22,7 @@ export const getExistingSubscription = async () => {
     return null;
   }
   try {
-    const registration = await navigator.serviceWorker.getRegistration('/sw.js');
+    const registration = await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js');
     if (!registration) return null;
     const subscription = await registration.pushManager.getSubscription();
     return subscription;
@@ -58,8 +58,8 @@ export const subscribeUserToPush = async (token) => {
   }
 
   try {
-    // 1. Register Service Worker (idempotent)
-    const registration = await navigator.serviceWorker.register('/sw.js');
+    // 1. Register Service Worker (idempotent) — use the Firebase messaging SW for all push
+    const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
     console.log('Service Worker registered:', registration.scope);
 
     // Wait for the service worker to be ready
@@ -151,7 +151,7 @@ export const subscribeUserToPush = async (token) => {
  */
 export const unsubscribeUserFromPush = async (token) => {
   try {
-    const registration = await navigator.serviceWorker.getRegistration('/sw.js');
+    const registration = await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js');
     if (!registration) return;
 
     const subscription = await registration.pushManager.getSubscription();

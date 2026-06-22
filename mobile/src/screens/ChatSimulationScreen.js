@@ -1,303 +1,425 @@
-import React, { useState, useRef, useEffect, useContext, useCallback } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  TextInput,
-  TouchableOpacity,
-  FlatList,
-  KeyboardAvoidingView,
-  Platform,
   SafeAreaView,
   ActivityIndicator,
-  Alert
+  TouchableOpacity,
+  KeyboardAvoidingView,
+  Platform,
+  Modal,
+  FlatList,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { AuthContext } from '../context/AuthContext';
+import { useCometChatContext } from '../context/CometChatContext';
 import { API_BASE_URL } from '../services/api';
-import io from 'socket.io-client';
+
+let CometChatMessageList = null;
+let CometChatMessageComposer = null;
+let CometChatMessageHeader = null;
+let CometChatCallButtons = null;
+let CometChat = null;
+
+try {
+  const uikit = require('@cometchat/chat-uikit-react-native');
+  CometChatMessageList = uikit.CometChatMessageList;
+  CometChatMessageComposer = uikit.CometChatMessageComposer;
+  CometChatMessageHeader = uikit.CometChatMessageHeader;
+  CometChatCallButtons = uikit.CometChatCallButtons;
+  CometChat = require('@cometchat/chat-sdk-react-native').CometChat;
+} catch (e) {
+  console.warn('[ChatSimulationScreen] CometChat not available:', e.message);
+}
 
 const ChatSimulationScreen = ({ route, navigation }) => {
-  const { contact } = route.params || {};
+  const { contact, group } = route.params || {};
   const { user, token } = useContext(AuthContext);
-  
-  const [messages, setMessages] = useState([]);
-  const [inputText, setInputText] = useState('');
+  const { isReady, cometChatUid } = useCometChatContext();
+  const [ccUser, setCcUser] = useState(null);
+  const [ccGroup, setCcGroup] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [typing, setTyping] = useState(null);
-  const [isOnline, setIsOnline] = useState(false);
-  const chatEnded = contact?.chatEnded || false;
-  
-  const socketRef = useRef(null);
-  const flatListRef = useRef(null);
-  const typingTimeoutRef = useRef(null);
+  const [error, setError] = useState(null);
+  const [contacts, setContacts] = useState([]);
+  const [loadingContacts, setLoadingContacts] = useState(true);
 
-  // Connect socket
+  // Group member states
+  const [showAddMemberModal, setShowAddMemberModal] = useState(false);
+  const [showManageMembersModal, setShowManageMembersModal] = useState(false);
+  const [groupMembers, setGroupMembers] = useState([]);
+
+  // Fetch approved contacts to gate composer
   useEffect(() => {
-    if (!token || !contact) return;
-
-    const socket = io(API_BASE_URL, {
-      auth: { token },
-      transports: ['websocket', 'polling']
-    });
-
-    socket.on('connect', () => {
-      console.log('[MobileChat] Socket connected');
-      // Check if contact is online
-      socket.emit('user:status', { targetUserId: contact.id }, (response) => {
-        setIsOnline(response?.online || false);
-      });
-    });
-
-    socket.on('message:received', (message) => {
-      if (message.senderId === contact.id || message.receiverId === contact.id) {
-        setMessages(prev => [...prev, message]);
-        // Mark as read
-        if (message.senderId === contact.id) {
-          socket.emit('messages:read', { contactId: contact.id });
-        }
-      }
-    });
-
-    socket.on('typing:start', ({ userId, userName }) => {
-      if (userId === contact.id) {
-        setTyping(userName);
-      }
-    });
-
-    socket.on('typing:stop', ({ userId }) => {
-      if (userId === contact.id) {
-        setTyping(null);
-      }
-    });
-
-    socket.on('user:online', ({ userId, online }) => {
-      if (userId === contact.id) {
-        setIsOnline(online);
-      }
-    });
-
-    socketRef.current = socket;
-
-    return () => {
-      socket.disconnect();
-    };
-  }, [token, contact]);
-
-  // Fetch message history
-  useEffect(() => {
-    if (!token || !contact) return;
-
-    const fetchMessages = async () => {
+    if (!token) return;
+    const fetchContacts = async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/api/chat/messages/${contact.id}`, {
-          headers: { 'Authorization': `Bearer ${token}` }
+        const res = await fetch(`${API_BASE_URL}/api/cometchat/contacts`, {
+          headers: { Authorization: `Bearer ${token}` },
         });
         if (res.ok) {
           const data = await res.json();
-          setMessages(data);
+          setContacts(data.contacts || []);
         }
       } catch (err) {
-        console.error('[MobileChat] Error fetching messages:', err);
+        console.error('[ChatScreen] Error fetching contacts:', err);
+      } finally {
+        setLoadingContacts(false);
+      }
+    };
+    fetchContacts();
+  }, [token]);
+
+  const isDoctorUser = user?.role === 'DOCTOR';
+
+  // Fetch the CometChat user object from their UID
+  useEffect(() => {
+    if (!contact || !isReady) return;
+
+    const fetchUser = async () => {
+      try {
+        const uid = contact.cometChatUid || contact.id;
+        const fetchedUser = await CometChat.getUser(uid);
+        setCcUser(fetchedUser);
+      } catch (err) {
+        console.error('[ChatScreen] Error fetching CometChat user:', err);
+        setError('Could not load this conversation. Please try again.');
       } finally {
         setLoading(false);
       }
     };
 
-    fetchMessages();
+    fetchUser();
+  }, [contact, isReady]);
 
-    // Mark messages as read
-    if (socketRef.current) {
-      socketRef.current.emit('messages:read', { contactId: contact.id });
-    }
-  }, [token, contact]);
-
-  // Update navigation title
+  // Fetch the CometChat group object
   useEffect(() => {
-    if (contact) {
+    if (!group || !isReady) return;
+
+    const fetchGroup = async () => {
+      try {
+        const fetchedGroup = await CometChat.getGroup(group.guid);
+        setCcGroup(fetchedGroup);
+      } catch (err) {
+        console.error('[ChatScreen] Error fetching CometChat group:', err);
+        setError('Could not load this group. Please try again.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchGroup();
+  }, [group, isReady]);
+
+  // Group handlers
+  const handleAddMember = async (uid) => {
+    if (!ccGroup) return;
+    try {
+      const membersList = [
+        new CometChat.GroupMember(uid, CometChat.GROUP_MEMBER_SCOPE.PARTICIPANT)
+      ];
+      await CometChat.addMembersToGroup(ccGroup.getGuid(), membersList, []);
+      Alert.alert('Success', 'Member added successfully!');
+      setShowAddMemberModal(false);
+    } catch (err) {
+      console.error('[ChatScreen] Error adding member:', err);
+      Alert.alert('Error', 'Failed to add member: ' + (err.message || err.errorDescription || err));
+    }
+  };
+
+  const fetchGroupMembers = async () => {
+    if (!ccGroup) return;
+    try {
+      const groupMembersRequest = new CometChat.GroupMembersRequestBuilder(ccGroup.getGuid())
+        .setLimit(100)
+        .build();
+      const members = await groupMembersRequest.fetchNext();
+      setGroupMembers(members || []);
+      setShowManageMembersModal(true);
+    } catch (err) {
+      console.error('[ChatScreen] Error fetching group members:', err);
+    }
+  };
+
+  const handleRemoveMember = async (uid) => {
+    if (!ccGroup) return;
+    try {
+      await CometChat.kickGroupMember(ccGroup.getGuid(), uid);
+      setGroupMembers(prev => prev.filter(m => m.getUid() !== uid));
+    } catch (err) {
+      console.error('[ChatScreen] Error removing member:', err);
+      Alert.alert('Error', 'Failed to remove member: ' + (err.message || err.errorDescription || err));
+    }
+  };
+
+  const handleDeleteGroup = () => {
+    if (!ccGroup) return;
+    Alert.alert(
+      'Delete Group',
+      'Are you sure you want to delete this group? All messages will be permanently lost.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await CometChat.deleteGroup(ccGroup.getGuid());
+              navigation.goBack();
+            } catch (err) {
+              console.error('[ChatScreen] Error deleting group:', err);
+              Alert.alert('Error', 'Failed to delete group: ' + (err.message || err.errorDescription || err));
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  // Set navigation header
+  useEffect(() => {
+    const titleText = contact ? contact.name : (group ? group.name : '');
+    if (titleText) {
       navigation.setOptions({
-        headerTitleAlign: 'left',
         headerTitle: () => (
           <View style={styles.headerTitleContainer}>
-            <Text style={styles.headerTitleText} numberOfLines={1}>{contact.name}</Text>
-            <Text style={[styles.headerSubtitle, { color: isOnline ? '#10b981' : '#94a3b8' }]}>
-              {isOnline ? '● Online' : '○ Offline'}
+            <Text style={styles.headerTitleText} numberOfLines={1}>
+              {titleText}
             </Text>
           </View>
         ),
-        headerRight: () => (
-          <View style={styles.headerRight}>
-            <TouchableOpacity
-              onPress={() => Alert.alert('Coming Soon', 'Voice call feature coming in Step 2')}
-              style={styles.headerCallBtn}
-            >
-              <Ionicons name="call-outline" size={20} color="#0d9488" />
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => Alert.alert('Coming Soon', 'Video call feature coming in Step 2')}
-              style={styles.headerCallBtn}
-            >
-              <Ionicons name="videocam-outline" size={20} color="#0d9488" />
-            </TouchableOpacity>
-          </View>
-        )
+        headerRight: () => {
+          const isGroupAdmin = group && isDoctorUser && ccGroup && ccGroup.getOwner() === cometChatUid;
+          if (isGroupAdmin) {
+            return (
+              <View style={{ flexDirection: 'row', gap: 16, marginRight: 10 }}>
+                <TouchableOpacity onPress={() => setShowAddMemberModal(true)}>
+                  <Ionicons name="person-add-outline" size={20} color="#0d9488" />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={fetchGroupMembers}>
+                  <Ionicons name="settings-outline" size={20} color="#0d9488" />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={handleDeleteGroup}>
+                  <Ionicons name="trash-outline" size={20} color="#ef4444" />
+                </TouchableOpacity>
+              </View>
+            );
+          }
+          return null;
+        }
       });
     }
-  }, [contact, isOnline, navigation]);
+  }, [contact, group, navigation, isDoctorUser, ccGroup, cometChatUid]);
 
-  const handleSendMessage = useCallback(() => {
-    if (!inputText.trim() || !socketRef.current) return;
-
-    const content = inputText.trim();
-    setInputText('');
-
-    socketRef.current.emit('message:send', {
-      receiverId: contact.id,
-      content
-    }, (response) => {
-      if (response.success) {
-        setMessages(prev => [...prev, response.message]);
-      } else {
-        console.error('[MobileChat] Send failed:', response.error);
-      }
-    });
-
-    // Stop typing indicator
-    socketRef.current.emit('typing:stop', { receiverId: contact.id });
-  }, [inputText, contact]);
-
-  const handleInputChange = (text) => {
-    setInputText(text);
-    if (!socketRef.current || !contact) return;
-
-    socketRef.current.emit('typing:start', { receiverId: contact.id });
-
-    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-    typingTimeoutRef.current = setTimeout(() => {
-      if (socketRef.current) {
-        socketRef.current.emit('typing:stop', { receiverId: contact.id });
-      }
-    }, 1500);
-  };
-
-  const getInitials = (name) => {
-    if (!name) return '?';
-    const parts = name.replace(/^dr\.\s+/i, '').trim().split(/\s+/);
-    if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
-    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-  };
-
-  const formatTime = (dateStr) => {
-    if (!dateStr) return '';
-    const date = new Date(dateStr);
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  };
-
-  const renderMessage = ({ item }) => {
-    // System/background messages
-    if (item.messageType === 'system') {
-      return (
-        <View style={styles.systemMsgRow}>
-          <View style={styles.systemMsgBubble}>
-            <Text style={styles.systemMsgText}>{item.content}</Text>
-          </View>
-        </View>
-      );
-    }
-
-    const isMine = item.senderId === user?.id;
+  if (!contact && !group) {
     return (
-      <View style={[styles.msgRow, isMine ? styles.msgRowSent : styles.msgRowReceived]}>
-        <Text style={styles.msgMeta}>
-          {item.sender?.name || (isMine ? user.name : contact.name)} • {formatTime(item.createdAt)}
-        </Text>
-        <View style={[styles.msgBubble, isMine ? styles.msgBubbleSent : styles.msgBubbleReceived]}>
-          <Text style={[styles.msgText, isMine ? styles.msgTextSent : styles.msgTextReceived]}>
-            {item.content}
+      <SafeAreaView style={styles.container}>
+        <View style={styles.centerContent}>
+          <Text style={styles.errorText}>No conversation selected</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!isReady || loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.centerContent}>
+          <ActivityIndicator size="large" color="#0d9488" />
+          <Text style={styles.loadingText}>Loading conversation...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.centerContent}>
+          <Ionicons name="alert-circle-outline" size={48} color="#ef4444" />
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity
+            style={styles.retryBtn}
+            onPress={() => {
+              setError(null);
+              setLoading(true);
+            }}
+          >
+            <Text style={styles.retryBtnText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!ccUser && !ccGroup) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.centerContent}>
+          <Text style={styles.errorText}>Conversation target not found in chat system</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // If CometChat components aren't available (Expo Go), show fallback
+  if (!CometChatMessageList || !CometChatMessageComposer) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.centerContent}>
+          <Ionicons name="chatbubbles-outline" size={48} color="#94a3b8" />
+          <Text style={styles.errorText}>Chat requires a development build</Text>
+          <Text style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', marginTop: 4 }}>
+            CometChat native modules are not available in Expo Go. Use npx expo run:ios to enable chat.
           </Text>
         </View>
-      </View>
-    );
-  };
-
-  if (!contact) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.emptyState}>
-          <Text>No contact selected</Text>
-        </View>
       </SafeAreaView>
     );
   }
 
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.emptyState}>
-          <ActivityIndicator size="large" color="#0d9488" />
-          <Text style={styles.loadingText}>Loading messages...</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
+  const targetUid = contact?.cometChatUid || contact?.id;
+  const isPatientDoctorChat = ccUser
+    ? ((user?.role === 'PATIENT' && ccUser.getRole() === 'doctor') ||
+       (user?.role === 'DOCTOR' && ccUser.getRole() === 'patient'))
+    : false;
+  const matchedContact = targetUid
+    ? contacts.find(c => c.id === targetUid || c.cometChatUid === targetUid)
+    : null;
+  const isChatAllowed = !isPatientDoctorChat || (matchedContact && !matchedContact.chatEnded);
 
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView
-        style={styles.keyboardView}
+        style={styles.chatContainer}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
       >
-        {/* Messages */}
-        <FlatList
-          ref={flatListRef}
-          data={messages}
-          keyExtractor={(item) => item.id}
-          renderItem={renderMessage}
-          contentContainerStyle={styles.messagesList}
-          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
-          ListEmptyComponent={
-            <View style={styles.emptyMessages}>
-              <Ionicons name="chatbubble-outline" size={40} color="#cbd5e1" />
-              <Text style={styles.emptyMessagesText}>No messages yet. Say hello!</Text>
-            </View>
-          }
-          ListFooterComponent={
-            typing ? (
-              <View style={styles.typingContainer}>
-                <Text style={styles.typingText}>{typing} is typing...</Text>
-              </View>
-            ) : null
-          }
-        />
+        {/* Message Header — shows name, presence status */}
+        <View style={styles.messageHeader}>
+          {ccUser ? (
+            <CometChatMessageHeader
+              user={ccUser}
+              hideVideoCallButton={!isDoctorUser}
+              hideVoiceCallButton={!isDoctorUser}
+            />
+          ) : (
+            <>
+              <CometChatMessageHeader
+                group={ccGroup}
+                hideVideoCallButton={!isDoctorUser}
+                hideVoiceCallButton={!isDoctorUser}
+              />
+              {isDoctorUser && ccGroup && CometChatCallButtons && (
+                <View style={styles.groupCallButtons}>
+                  <CometChatCallButtons group={ccGroup} />
+                </View>
+              )}
+            </>
+          )}
+        </View>
 
-        {/* Input Bar */}
-        {chatEnded ? (
-          <View style={styles.chatEndedBar}>
-            <Ionicons name="lock-closed-outline" size={16} color="#94a3b8" />
-            <Text style={styles.chatEndedText}>This chat has ended — appointment was cancelled</Text>
+        {/* Message List — real-time messages, typing, read receipts */}
+        <View style={styles.messageList}>
+          {ccUser ? (
+            <CometChatMessageList user={ccUser} />
+          ) : (
+            <CometChatMessageList group={ccGroup} />
+          )}
+        </View>
+
+        {/* Message Composer — text input, attachments, send */}
+        {isChatAllowed ? (
+          <View style={styles.messageComposer}>
+            {ccUser ? (
+              <CometChatMessageComposer user={ccUser} />
+            ) : (
+              <CometChatMessageComposer group={ccGroup} />
+            )}
           </View>
         ) : (
-          <View style={styles.inputBar}>
-            <TextInput
-              style={styles.input}
-              placeholder={`Message ${contact.name}...`}
-              placeholderTextColor="#94a3b8"
-              value={inputText}
-              onChangeText={handleInputChange}
-              multiline
-              maxLength={1000}
-            />
-            <TouchableOpacity
-              style={[styles.sendBtn, !inputText.trim() && styles.sendBtnDisabled]}
-              onPress={handleSendMessage}
-              disabled={!inputText.trim()}
-            >
-              <Ionicons name="send" size={20} color="#ffffff" />
-            </TouchableOpacity>
+          <View style={styles.gatedComposerBanner}>
+            <Ionicons name="lock-closed-outline" size={16} color="#b91c1c" />
+            <Text style={styles.gatedComposerText}>
+              This consultation chat is closed or request is pending.
+            </Text>
           </View>
         )}
       </KeyboardAvoidingView>
+
+      {/* Add Member Modal */}
+      <Modal
+        visible={showAddMemberModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowAddMemberModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Add Member to Group</Text>
+            <FlatList
+              data={contacts}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => (
+                <View style={styles.checklistRow}>
+                  <Text style={styles.checklistText}>{item.name}</Text>
+                  <TouchableOpacity
+                    style={styles.actionBtn}
+                    onPress={() => handleAddMember(item.cometChatUid)}
+                  >
+                    <Text style={styles.actionBtnText}>Add</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+              style={{ maxHeight: 250, marginBottom: 15 }}
+            />
+            <TouchableOpacity
+              style={styles.cancelBtn}
+              onPress={() => setShowAddMemberModal(false)}
+            >
+              <Text style={styles.cancelBtnText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Manage Members Modal */}
+      <Modal
+        visible={showManageMembersModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowManageMembersModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Manage Members</Text>
+            <FlatList
+              data={groupMembers}
+              keyExtractor={(item) => item.getUid()}
+              renderItem={({ item }) => (
+                <View style={styles.checklistRow}>
+                  <Text style={styles.checklistText}>{item.getName()} ({item.getRole()})</Text>
+                  {item.getUid() !== cometChatUid && (
+                    <TouchableOpacity
+                      style={styles.dangerBtn}
+                      onPress={() => handleRemoveMember(item.getUid())}
+                    >
+                      <Text style={styles.dangerBtnText}>Kick</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
+              style={{ maxHeight: 250, marginBottom: 15 }}
+            />
+            <TouchableOpacity
+              style={styles.cancelBtn}
+              onPress={() => setShowManageMembersModal(false)}
+            >
+              <Text style={styles.cancelBtnText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -305,140 +427,34 @@ const ChatSimulationScreen = ({ route, navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc',
+    backgroundColor: '#ffffff',
   },
-  keyboardView: {
+  chatContainer: {
     flex: 1,
   },
-  headerRight: {
+  messageHeader: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+  },
+  groupCallButtons: {
     flexDirection: 'row',
-    alignItems: 'center',
-    marginRight: 8,
-    gap: 6,
-  },
-  headerCallBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: '#f1f5f9',
-    alignItems: 'center',
     justifyContent: 'center',
-  },
-  headerTitleContainer: {
-    flexDirection: 'column',
-    justifyContent: 'center',
-    alignItems: 'flex-start',
-    marginLeft: -8,
-  },
-  headerTitleText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#0f172a',
-  },
-  headerSubtitle: {
-    fontSize: 11,
-    marginTop: 1,
-  },
-  onlineDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  onlineText: {
-    fontSize: 12,
-    color: '#64748b',
-  },
-  messagesList: {
-    padding: 16,
-    flexGrow: 1,
-  },
-  msgRow: {
-    marginBottom: 12,
-    maxWidth: '78%',
-  },
-  msgRowSent: {
-    alignSelf: 'flex-end',
-    alignItems: 'flex-end',
-  },
-  msgRowReceived: {
-    alignSelf: 'flex-start',
-    alignItems: 'flex-start',
-  },
-  msgMeta: {
-    fontSize: 10,
-    color: '#94a3b8',
-    marginBottom: 3,
-    paddingHorizontal: 4,
-  },
-  msgBubble: {
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 18,
-  },
-  msgBubbleSent: {
-    backgroundColor: '#0d9488',
-    borderBottomRightRadius: 4,
-  },
-  msgBubbleReceived: {
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    borderBottomLeftRadius: 4,
-  },
-  msgText: {
-    fontSize: 15,
-    lineHeight: 21,
-  },
-  msgTextSent: {
-    color: '#ffffff',
-  },
-  msgTextReceived: {
-    color: '#0f172a',
-  },
-  typingContainer: {
-    paddingHorizontal: 16,
     paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
   },
-  typingText: {
-    fontSize: 12,
-    color: '#64748b',
-    fontStyle: 'italic',
+  messageList: {
+    flex: 1,
   },
-  inputBar: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: '#ffffff',
+  messageComposer: {
     borderTopWidth: 1,
     borderTopColor: '#e2e8f0',
-    gap: 10,
   },
-  input: {
-    flex: 1,
-    backgroundColor: '#f1f5f9',
-    borderRadius: 22,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    fontSize: 15,
-    maxHeight: 100,
-    color: '#0f172a',
-  },
-  sendBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: '#0d9488',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sendBtnDisabled: {
-    backgroundColor: '#cbd5e1',
-  },
-  emptyState: {
+  centerContent: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 40,
     gap: 12,
   },
   loadingText: {
@@ -446,51 +462,125 @@ const styles = StyleSheet.create({
     color: '#64748b',
     marginTop: 8,
   },
-  emptyMessages: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingTop: 80,
-    gap: 12,
-  },
-  emptyMessagesText: {
+  errorText: {
     fontSize: 14,
-    color: '#94a3b8',
-  },
-  systemMsgRow: {
-    alignSelf: 'center',
-    marginBottom: 12,
-    maxWidth: '80%',
-  },
-  systemMsgBubble: {
-    backgroundColor: '#f1f5f9',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    borderRadius: 12,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-  },
-  systemMsgText: {
-    fontSize: 12,
     color: '#64748b',
     textAlign: 'center',
-    fontStyle: 'italic',
   },
-  chatEndedBar: {
+  retryBtn: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: '#0d9488',
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  retryBtnText: {
+    color: '#ffffff',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  headerTitleContainer: {
+    flexDirection: 'column',
+    justifyContent: 'center',
+    alignItems: 'flex-start',
+  },
+  headerTitleText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  gatedComposerBanner: {
+    padding: 16,
+    backgroundColor: '#fef2f2',
+    borderTopWidth: 1,
+    borderTopColor: '#fee2e2',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    backgroundColor: '#f1f5f9',
-    borderTopWidth: 1,
-    borderTopColor: '#e2e8f0',
     gap: 8,
   },
-  chatEndedText: {
-    fontSize: 13,
-    color: '#94a3b8',
-    fontWeight: '500',
+  gatedComposerText: {
+    color: '#b91c1c',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 20,
+    width: '90%',
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#0f172a',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  checklistRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: '#f8fafc',
+    borderRadius: 8,
+    marginBottom: 6,
+  },
+  checklistText: {
+    fontSize: 14,
+    color: '#334155',
+    flex: 1,
+    marginRight: 10,
+  },
+  actionBtn: {
+    backgroundColor: '#0d9488',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+  },
+  actionBtnText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  dangerBtn: {
+    backgroundColor: '#ef4444',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+  },
+  dangerBtnText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  cancelBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  cancelBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#475569',
   },
 });
 

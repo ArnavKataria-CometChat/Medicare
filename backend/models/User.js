@@ -57,6 +57,11 @@ const User = sequelize.define('User', {
     defaultValue: 'active',
     allowNull: false,
   },
+  cometChatUid: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    unique: true,
+  },
 }, {
   hooks: {
     beforeCreate: async (user) => {

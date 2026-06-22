@@ -20,7 +20,9 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.cometchat.interns",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSCameraUsageDescription": "Camera access is needed for video calls with your doctor",
+        "NSMicrophoneUsageDescription": "Microphone access is needed for voice and video calls"
       }
     },
     "android": {
@@ -32,13 +34,22 @@
       "googleServicesFile": "./google-services.json",
       "runtimeVersion": {
         "policy": "appVersion"
-      }
+      },
+      "permissions": [
+        "CAMERA",
+        "RECORD_AUDIO",
+        "MODIFY_AUDIO_SETTINGS"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "updates": {
       "url": "https://u.expo.dev/ede4583f-5082-487f-9816-6762a1c4c89b"
-    }
+    },
+    "plugins": [
+      "react-native-video",
+      "react-native-localize"
+    ]
   }
 }

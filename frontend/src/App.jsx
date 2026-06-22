@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
 import { SocketProvider } from './context/SocketContext';
+import { CometChatProvider } from './cometchat/CometChatProvider';
 import Layout from './components/Layout';
 import AdminLayout from './components/AdminLayout';
 
@@ -230,8 +231,23 @@ const AppContentWrapper = () => {
 
   return (
     <SocketProvider currentPath={currentPath}>
-      <AppContent />
+      <CometChatWrapper>
+        <AppContent />
+      </CometChatWrapper>
     </SocketProvider>
+  );
+};
+
+/**
+ * CometChatWrapper reads auth state and passes it to CometChatProvider.
+ * This is necessary because CometChatProvider needs the JWT token and user object.
+ */
+const CometChatWrapper = ({ children }) => {
+  const { token, user } = useAuth();
+  return (
+    <CometChatProvider token={token} user={user}>
+      {children}
+    </CometChatProvider>
   );
 };
 

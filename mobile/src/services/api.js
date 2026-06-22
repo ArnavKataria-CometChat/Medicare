@@ -20,9 +20,11 @@ const getDefaultBaseUrl = () => {
     return process.env.EXPO_PUBLIC_API_URL;
   }
   if (__DEV__) {
-    // Use the detected Metro host IP for both platforms.
-    // This works for physical devices over Wi-Fi (Expo Go).
-    // For Android emulator, set MANUAL_IP to '10.0.2.2' above.
+    // Android emulator uses 10.0.2.2 to reach host machine's localhost
+    // iOS simulator shares the Mac's network — use localhost or detected IP
+    if (Platform.OS === 'android') {
+      return 'http://10.0.2.2:5000';
+    }
     return `http://${devIp}:5000`;
   }
   // Production: point at the public API behind the ALB (HTTPS, SSL terminated

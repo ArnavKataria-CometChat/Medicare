@@ -1,4 +1,17 @@
 /* Design Tokens & Theme Setup */
+
+/* CometChat Ongoing Call — when reparented to .cometchat-call-elevator at body level,
+   ensure it fills the container fully. */
+.cometchat-call-elevator .cometchat-ongoing-call,
+.cometchat-call-elevator .cometchat:has(> .cometchat-ongoing-call) {
+  width: 100% !important;
+  height: 100% !important;
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  border-radius: 0 !important;
+}
+
 :root {
   /* Premium Slate White Theme */
   --bg-primary: #f8fafc;

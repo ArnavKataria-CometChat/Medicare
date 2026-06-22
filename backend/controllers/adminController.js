@@ -1,6 +1,7 @@
 import { User, DoctorProfile, HealthArticle, ActivityLog, NotificationLog, Appointment, sequelize } from '../models/index.js';
 import { Op } from 'sequelize';
 import { sendPush } from '../services/pushService.js';
+import { deriveCometChatUid, createCometChatUser, buildUserTags, deactivateCometChatUser, updateCometChatUser } from '../services/cometchatService.js';
 
 // USER MANAGEMENT
 export const adminGetUsers = async (req, res, next) => {
@@ -88,6 +89,17 @@ export const adminCreateUser = async (req, res, next) => {
       include: [{ model: DoctorProfile, as: 'doctorProfile' }]
     });
 
+    // CometChat: Create user at account creation time (non-blocking)
+    try {
+      const uid = deriveCometChatUid(user.id);
+      const tags = buildUserTags(role, specialization);
+      await createCometChatUser(uid, name, role, tags);
+      await User.update({ cometChatUid: uid }, { where: { id: user.id } });
+      createdUser.dataValues.cometChatUid = uid;
+    } catch (ccError) {
+      console.error('[CometChat] Non-blocking sync error during admin user create:', ccError.message);
+    }
+
     res.status(201).json(createdUser);
   } catch (error) {
     await transaction.rollback();
@@ -164,6 +176,18 @@ export const adminUpdateUser = async (req, res, next) => {
       include: [{ model: DoctorProfile, as: 'doctorProfile' }]
     });
 
+    // CometChat: Sync updated name/role/tags (non-blocking)
+    if (updatedUser.cometChatUid) {
+      const updatedTags = buildUserTags(updatedUser.role, updatedUser.doctorProfile?.specialization);
+      updateCometChatUser(updatedUser.cometChatUid, {
+        name: updatedUser.name,
+        role: updatedUser.role,
+        tags: updatedTags,
+      }).catch((ccError) => {
+        console.error('[CometChat] Non-blocking update error:', ccError.message);
+      });
+    }
+
     res.status(200).json(updatedUser);
   } catch (error) {
     await transaction.rollback();
@@ -200,6 +224,13 @@ export const adminDeactivateUser = async (req, res, next) => {
       activityType: 'ADMIN_USER_DEACTIVATE',
       description: `Admin deactivated user account: ${user.email}`,
     });
+
+    // CometChat: Deactivate user (non-blocking)
+    if (user.cometChatUid) {
+      deactivateCometChatUser(user.cometChatUid).catch((ccError) => {
+        console.error('[CometChat] Non-blocking deactivation error:', ccError.message);
+      });
+    }
 
     res.status(200).json({ message: `User ${user.email} deactivated successfully.` });
   } catch (error) {

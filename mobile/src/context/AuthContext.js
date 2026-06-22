@@ -77,6 +77,8 @@ export const AuthProvider = ({ children }) => {
     try {
       // Unregister push token before logout
       await unregisterPushToken();
+
+      // Logout from CometChat is handled reactively by CometChatProvider when the token changes to null
       
       // Best-effort logout call to the backend
       if (token) {

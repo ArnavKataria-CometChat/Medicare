@@ -1,6 +1,8 @@
 import { Appointment, User, DoctorProfile, NotificationLog, ActivityLog, Message } from '../models/index.js';
 import { sendPush } from '../services/pushService.js';
 import { sendExpoPush } from '../services/firebasePushService.js';
+import { deriveCometChatUid, sendCometChatMessage } from '../services/cometchatService.js';
+
 
 export const getAppointments = async (req, res, next) => {
   try {
@@ -217,6 +219,17 @@ export const cancelAppointment = async (req, res, next) => {
         content: 'This consultation has been cancelled. Chat has ended.',
         messageType: 'system'
       });
+
+      // Send CometChat message
+      const doctorUid = deriveCometChatUid(appointment.doctorProfile.user.id);
+      const patientUid = deriveCometChatUid(appointment.patientId);
+      const senderUid = req.user.role === 'PATIENT' ? patientUid : doctorUid;
+      const receiverUid = req.user.role === 'PATIENT' ? doctorUid : patientUid;
+      await sendCometChatMessage(
+        senderUid,
+        receiverUid,
+        'This consultation has been cancelled. Chat has ended.'
+      ).catch(err => console.error('[CometChat] Failed to send cancel system message:', err));
     }
 
     const dateStr = appointment.appointmentDate;
@@ -398,6 +411,15 @@ export const acceptChat = async (req, res, next) => {
       description: `Accepted chat request from ${appointment.patient.name}`,
       metadata: JSON.stringify({ appointmentId: appointment.id })
     });
+
+    // Send initial greet message on CometChat on behalf of the doctor
+    const doctorUid = deriveCometChatUid(appointment.doctorProfile.user.id);
+    const patientUid = deriveCometChatUid(appointment.patientId);
+    await sendCometChatMessage(
+      doctorUid,
+      patientUid,
+      `Hello! I have accepted your chat request for our appointment on ${appointment.appointmentDate} at ${appointment.appointmentTime}. How can I help you today?`
+    ).catch(err => console.error('[CometChat] Failed to send accept greeting:', err));
 
     res.status(200).json({ message: 'Chat request accepted.', appointment });
   } catch (error) {

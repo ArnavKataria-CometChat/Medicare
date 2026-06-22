@@ -9,6 +9,10 @@ import NotificationLog from './NotificationLog.js';
 import PushSubscription from './PushSubscription.js';
 import Message from './Message.js';
 import ExpoPushToken from './ExpoPushToken.js';
+import WebhookLog from './WebhookLog.js';
+import CallLog from './CallLog.js';
+import AgentMetrics from './AgentMetrics.js';
+import DoctorSession from './DoctorSession.js';
 
 // User <-> DoctorProfile (1:1)
 User.hasOne(DoctorProfile, { foreignKey: 'userId', as: 'doctorProfile', onDelete: 'CASCADE' });
@@ -59,5 +63,9 @@ export {
   NotificationLog,
   PushSubscription,
   Message,
-  ExpoPushToken
+  ExpoPushToken,
+  WebhookLog,
+  CallLog,
+  AgentMetrics,
+  DoctorSession
 };

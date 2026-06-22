@@ -1,3 +1,7 @@
+import 'react-native-gesture-handler';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { CometChatThemeProvider, CometChatI18nProvider } from '@cometchat/chat-uikit-react-native';
 import React, { useContext, useEffect, useRef, useState } from 'react';
 import { View, ActivityIndicator, StyleSheet, TouchableOpacity, Alert, Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -9,8 +13,10 @@ import io from 'socket.io-client';
 import * as Notifications from 'expo-notifications';
 
 import { AuthProvider, AuthContext } from './src/context/AuthContext';
+import { CometChatProvider } from './src/context/CometChatContext';
 import { API_BASE_URL } from './src/services/api';
 import { registerForPushNotifications } from './src/services/notifications';
+import CallSurfaces from './src/components/CallSurfaces';
 
 // Import Screens
 import LoginScreen from './src/screens/LoginScreen';
@@ -345,10 +351,21 @@ const NavigationWrapper = () => {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <StatusBar style="dark" />
-      <NavigationWrapper />
-    </AuthProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <CometChatI18nProvider>
+          <CometChatThemeProvider>
+            <AuthProvider>
+              <CometChatProvider>
+                <StatusBar style="dark" />
+                <NavigationWrapper />
+                <CallSurfaces />
+              </CometChatProvider>
+            </AuthProvider>
+          </CometChatThemeProvider>
+        </CometChatI18nProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
 

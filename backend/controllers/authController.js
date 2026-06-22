@@ -2,6 +2,7 @@ import { User, DoctorProfile, ActivityLog } from '../models/index.js';
 import { Op } from 'sequelize';
 import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
+import { syncUserToCometChat, deriveCometChatUid, createCometChatUser, buildUserTags } from '../services/cometchatService.js';
 
 dotenv.config();
 
@@ -68,6 +69,17 @@ export const register = async (req, res, next) => {
       description: 'User registered account',
       metadata: JSON.stringify({ email: user.email }),
     });
+
+    // CometChat: Create user on registration (non-blocking — don't fail registration if CometChat is down)
+    try {
+      const uid = deriveCometChatUid(user.id);
+      const tags = buildUserTags('PATIENT');
+      await createCometChatUser(uid, user.name, 'PATIENT', tags);
+      user.cometChatUid = uid;
+      await user.save();
+    } catch (ccError) {
+      console.error('[CometChat] Non-blocking sync error during registration:', ccError.message);
+    }
 
     res.status(201).json({
       message: 'Registration successful',

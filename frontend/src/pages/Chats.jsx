@@ -1,874 +1,864 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
-import io from 'socket.io-client';
-
-// In production the frontend is served from the same origin as the backend
-// (behind nginx), so connect to the current origin. In dev, talk to the
-// local backend directly on port 5000.
-const SOCKET_URL = import.meta.env.PROD ? window.location.origin : 'http://localhost:5000';
+import { useCometChat } from '../cometchat/CometChatProvider';
+import {
+  CometChatConversations,
+  CometChatMessageList,
+  CometChatMessageComposer,
+  CometChatMessageHeader,
+  CometChatCallButtons,
+} from '@cometchat/chat-uikit-react';
+import { CometChat } from '@cometchat/chat-sdk-javascript';
 
 const Chats = ({ navigate }) => {
   const { user, token } = useAuth();
-  const [socket, setSocket] = useState(null);
+  const { isReady, cometChatUid } = useCometChat();
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [selectedConversation, setSelectedConversation] = useState(null);
   const [contacts, setContacts] = useState([]);
-  const [conversations, setConversations] = useState([]);
-  const [selectedContact, setSelectedContact] = useState(null);
-  const [messages, setMessages] = useState([]);
-  const [textVal, setTextVal] = useState('');
-  const [typing, setTyping] = useState(null);
-  const [onlineUsers, setOnlineUsers] = useState({});
   const [loadingContacts, setLoadingContacts] = useState(true);
-  const [loadingMessages, setLoadingMessages] = useState(false);
-  const messagesEndRef = useRef(null);
-  const typingTimeoutRef = useRef(null);
+  const [showContactsPanel, setShowContactsPanel] = useState(false);
 
-  // Initialize socket connection
-  useEffect(() => {
-    if (!token) return;
+  // Group states
+  const [selectedGroup, setSelectedGroup] = useState(null);
+  const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
+  const [showAddMemberModal, setShowAddMemberModal] = useState(false);
+  const [showManageMembersModal, setShowManageMembersModal] = useState(false);
+  const [groupMembers, setGroupMembers] = useState([]);
+  const [groupName, setGroupName] = useState('');
+  const [selectedMembers, setSelectedMembers] = useState([]);
 
-    const newSocket = io(SOCKET_URL, {
-      auth: { token },
-      transports: ['websocket', 'polling']
-    });
+  const toggleMemberSelection = (uid) => {
+    setSelectedMembers(prev =>
+      prev.includes(uid) ? prev.filter(id => id !== uid) : [...prev, uid]
+    );
+  };
 
-    newSocket.on('connect', () => {
-      console.log('[Chat] Socket connected');
-    });
+  const handleCreateGroup = async (e) => {
+    e.preventDefault();
+    if (!groupName.trim()) return;
 
-    newSocket.on('connect_error', (err) => {
-      console.error('[Chat] Socket connection error:', err.message);
-    });
+    try {
+      const guid = 'group_' + Date.now();
+      const group = new CometChat.Group(
+        guid,
+        groupName.trim(),
+        CometChat.GROUP_TYPE.PUBLIC,
+        ''
+      );
 
-    setSocket(newSocket);
+      const createdGroup = await CometChat.createGroup(group);
+      console.log('[Chats] Group created:', createdGroup);
 
-    return () => {
-      newSocket.disconnect();
-    };
-  }, [token]);
-
-  // Listen for incoming messages
-  useEffect(() => {
-    if (!socket) return;
-
-    const handleMessage = (message) => {
-      // If it's from the currently selected contact or sent by me to them
-      if (selectedContact && 
-          (message.senderId === selectedContact.id || message.receiverId === selectedContact.id)) {
-        setMessages(prev => [...prev, message]);
-        // Mark as read since we're viewing this conversation
-        if (message.senderId === selectedContact.id) {
-          socket.emit('messages:read', { contactId: selectedContact.id });
-        }
+      if (selectedMembers.length > 0) {
+        const membersList = selectedMembers.map(
+          (uid) => new CometChat.GroupMember(uid, CometChat.GROUP_MEMBER_SCOPE.PARTICIPANT)
+        );
+        await CometChat.addMembersToGroup(guid, membersList, []);
       }
 
-      // Update conversations list
-      setConversations(prev => {
-        const contactId = message.senderId === user.id ? message.receiverId : message.senderId;
-        const updated = prev.map(conv => {
-          if (conv.id === contactId) {
-            return {
-              ...conv,
-              lastMessage: {
-                content: message.content,
-                time: message.createdAt,
-                isMine: message.senderId === user.id
-              },
-              unreadCount: (message.senderId !== user.id && contactId !== selectedContact?.id) 
-                ? (conv.unreadCount || 0) + 1 
-                : conv.unreadCount
-            };
-          }
-          return conv;
-        });
-        // Sort by last message time
-        updated.sort((a, b) => {
-          const timeA = a.lastMessage?.time || 0;
-          const timeB = b.lastMessage?.time || 0;
-          return new Date(timeB) - new Date(timeA);
-        });
-        return updated;
-      });
-    };
+      setSelectedGroup(createdGroup);
+      setSelectedUser(null);
+      const conversation = new CometChat.Conversation(guid, 'group');
+      conversation.setConversationWith(createdGroup);
+      setSelectedConversation(conversation);
 
-    const handleTypingStart = ({ userId, userName }) => {
-      if (selectedContact && userId === selectedContact.id) {
-        setTyping(userName);
-      }
-    };
+      setGroupName('');
+      setSelectedMembers([]);
+      setShowCreateGroupModal(false);
+    } catch (err) {
+      console.error('[Chats] Error creating group:', err);
+      alert('Failed to create group: ' + (err.message || err.errorDescription || err));
+    }
+  };
 
-    const handleTypingStop = ({ userId }) => {
-      if (selectedContact && userId === selectedContact.id) {
-        setTyping(null);
-      }
-    };
+  const handleAddMember = async (uid) => {
+    if (!selectedGroup) return;
+    try {
+      const membersList = [
+        new CometChat.GroupMember(uid, CometChat.GROUP_MEMBER_SCOPE.PARTICIPANT)
+      ];
+      await CometChat.addMembersToGroup(selectedGroup.getGuid(), membersList, []);
+      alert('Member added successfully!');
+      setShowAddMemberModal(false);
+    } catch (err) {
+      console.error('[Chats] Error adding member:', err);
+      alert('Failed to add member: ' + (err.message || err.errorDescription || err));
+    }
+  };
 
-    const handleOnline = ({ userId, online }) => {
-      setOnlineUsers(prev => ({ ...prev, [userId]: online }));
-    };
+  const fetchGroupMembers = async () => {
+    if (!selectedGroup) return;
+    try {
+      const groupMembersRequest = new CometChat.GroupMembersRequestBuilder(selectedGroup.getGuid())
+        .setLimit(100)
+        .build();
+      const members = await groupMembersRequest.fetchNext();
+      setGroupMembers(members || []);
+      setShowManageMembersModal(true);
+    } catch (err) {
+      console.error('[Chats] Error fetching group members:', err);
+    }
+  };
 
-    const handleMessagesRead = ({ userId }) => {
-      if (selectedContact && userId === selectedContact.id) {
-        setMessages(prev => prev.map(msg => 
-          msg.senderId === user.id ? { ...msg, read: true } : msg
-        ));
-      }
-    };
+  const handleRemoveMember = async (uid) => {
+    if (!selectedGroup) return;
+    try {
+      await CometChat.kickGroupMember(selectedGroup.getGuid(), uid);
+      setGroupMembers(prev => prev.filter(m => m.getUid() !== uid));
+    } catch (err) {
+      console.error('[Chats] Error removing member:', err);
+      alert('Failed to remove member: ' + (err.message || err.errorDescription || err));
+    }
+  };
 
-    socket.on('message:received', handleMessage);
-    socket.on('typing:start', handleTypingStart);
-    socket.on('typing:stop', handleTypingStop);
-    socket.on('user:online', handleOnline);
-    socket.on('messages:read', handleMessagesRead);
+  const handleDeleteGroup = async () => {
+    if (!selectedGroup) return;
+    if (!window.confirm('Are you sure you want to delete this group? All messages will be permanently lost.')) return;
+    try {
+      await CometChat.deleteGroup(selectedGroup.getGuid());
+      setSelectedGroup(null);
+      setSelectedConversation(null);
+      alert('Group deleted successfully!');
+    } catch (err) {
+      console.error('[Chats] Error deleting group:', err);
+      alert('Failed to delete group: ' + (err.message || err.errorDescription || err));
+    }
+  };
 
-    return () => {
-      socket.off('message:received', handleMessage);
-      socket.off('typing:start', handleTypingStart);
-      socket.off('typing:stop', handleTypingStop);
-      socket.off('user:online', handleOnline);
-      socket.off('messages:read', handleMessagesRead);
-    };
-  }, [socket, selectedContact, user]);
-
-  // Fetch contacts and conversations
+  // Fetch appointment-based contacts from our backend
   const fetchContacts = useCallback(async () => {
     if (!token) return;
     setLoadingContacts(true);
     try {
-      const [contactsRes, convsRes] = await Promise.all([
-        fetch('/api/chat/contacts', { headers: { 'Authorization': `Bearer ${token}` } }),
-        fetch('/api/chat/conversations', { headers: { 'Authorization': `Bearer ${token}` } })
-      ]);
-
-      if (contactsRes.ok) {
-        const contactsData = await contactsRes.json();
-        setContacts(contactsData);
-        // Query initial online status for all contacts
-        if (socket) {
-          contactsData.forEach(contact => {
-            socket.emit('user:status', { targetUserId: contact.id }, (response) => {
-              if (response) {
-                setOnlineUsers(prev => ({ ...prev, [contact.id]: response.online }));
-              }
-            });
-          });
-        }
-      }
-      if (convsRes.ok) {
-        const convsData = await convsRes.json();
-        setConversations(convsData);
-        // Also query online status for conversation contacts
-        if (socket) {
-          convsData.forEach(conv => {
-            socket.emit('user:status', { targetUserId: conv.id }, (response) => {
-              if (response) {
-                setOnlineUsers(prev => ({ ...prev, [conv.id]: response.online }));
-              }
-            });
-          });
-        }
+      const res = await fetch('/api/cometchat/contacts', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setContacts(data.contacts || []);
       }
     } catch (err) {
-      console.error('[Chat] Error fetching contacts:', err);
+      console.error('[Chats] Error fetching contacts:', err);
     } finally {
       setLoadingContacts(false);
     }
-  }, [token, socket]);
+  }, [token]);
 
   useEffect(() => {
     fetchContacts();
   }, [fetchContacts]);
 
-  // Re-fetch contacts when window regains focus (e.g., after accepting a chat request)
-  useEffect(() => {
-    const handleFocus = () => { fetchContacts(); };
-    window.addEventListener('focus', handleFocus);
-    return () => window.removeEventListener('focus', handleFocus);
-  }, [fetchContacts]);
-
-  // Also refresh sidebar when socket receives a notification about chat acceptance
-  useEffect(() => {
-    if (!socket) return;
-    const handleNotification = (notification) => {
-      if (notification.url === '/chats') {
-        fetchContacts();
-      }
-    };
-    socket.on('notification:received', handleNotification);
-    return () => { socket.off('notification:received', handleNotification); };
-  }, [socket, fetchContacts]);
-
-  // Fetch messages when selecting a contact
-  const selectContact = useCallback(async (contact) => {
-    setSelectedContact(contact);
-    setMessages([]);
-    setTyping(null);
-    setLoadingMessages(true);
-
-    // Query current online status of the selected contact
-    if (socket) {
-      socket.emit('user:status', { targetUserId: contact.id }, (response) => {
-        if (response) {
-          setOnlineUsers(prev => ({ ...prev, [contact.id]: response.online }));
-        }
-      });
+  // Handle conversation selection from CometChat's built-in list
+  const handleConversationClick = (conversation) => {
+    setSelectedConversation(conversation);
+    const conversationWith = conversation.getConversationWith();
+    if (conversation.getConversationType() === 'user') {
+      setSelectedUser(conversationWith);
+      setSelectedGroup(null);
+    } else if (conversation.getConversationType() === 'group') {
+      setSelectedGroup(conversationWith);
+      setSelectedUser(null);
     }
+  };
 
+  // Handle clicking a contact from our custom contacts panel
+  const handleContactClick = async (contact) => {
+    if (!contact.cometChatUid) {
+      console.warn('[Chats] Contact has no cometChatUid:', contact.name);
+      return;
+    }
     try {
-      const res = await fetch(`/api/chat/messages/${contact.id}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setMessages(data);
-      }
+      const ccUser = await CometChat.getUser(contact.cometChatUid);
+      setSelectedUser(ccUser);
+      setSelectedGroup(null);
+      // Build a conversation object for the message components
+      const conversation = new CometChat.Conversation(
+        contact.cometChatUid,
+        'user',
+      );
+      conversation.setConversationWith(ccUser);
+      setSelectedConversation(conversation);
+      setShowContactsPanel(false);
     } catch (err) {
-      console.error('[Chat] Error fetching messages:', err);
-    } finally {
-      setLoadingMessages(false);
+      console.error('[Chats] Error fetching CometChat user:', err);
     }
-
-    // Mark messages as read
-    if (socket) {
-      socket.emit('messages:read', { contactId: contact.id });
-    }
-
-    // Clear unread count for this contact
-    setConversations(prev => prev.map(conv => 
-      conv.id === contact.id ? { ...conv, unreadCount: 0 } : conv
-    ));
-  }, [token, socket]);
-
-  // Auto-scroll messages
-  useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [messages, typing]);
-
-  // Send message
-  const handleSend = (e) => {
-    e.preventDefault();
-    if (!textVal.trim() || !selectedContact || !socket) return;
-
-    socket.emit('message:send', {
-      receiverId: selectedContact.id,
-      content: textVal.trim()
-    }, (response) => {
-      if (response.success) {
-        setMessages(prev => [...prev, response.message]);
-      } else {
-        console.error('[Chat] Send failed:', response.error);
-      }
-    });
-
-    setTextVal('');
-    // Stop typing indicator
-    socket.emit('typing:stop', { receiverId: selectedContact.id });
   };
 
-  // Typing indicator
-  const handleInputChange = (e) => {
-    setTextVal(e.target.value);
-    if (!socket || !selectedContact) return;
+  // Staff users see nothing
+  if (user?.role === 'STAFF') {
+    return (
+      <div style={styles.emptyContainer}>
+        <h3 style={styles.emptyTitle}>Chat Unavailable</h3>
+        <p style={styles.emptyText}>Staff accounts do not have messaging access.</p>
+      </div>
+    );
+  }
 
-    socket.emit('typing:start', { receiverId: selectedContact.id });
+  // Not ready yet — show loading
+  if (!isReady) {
+    return (
+      <div style={styles.emptyContainer}>
+        <div style={styles.spinner} />
+        <p style={styles.emptyText}>Connecting to chat...</p>
+      </div>
+    );
+  }
 
-    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-    typingTimeoutRef.current = setTimeout(() => {
-      socket.emit('typing:stop', { receiverId: selectedContact.id });
-    }, 1500);
-  };
-
-  const getInitials = (name) => {
-    if (!name) return '?';
-    const parts = name.replace(/^dr\.\s+/i, '').trim().split(/\s+/);
-    if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
-    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-  };
-
-  const formatTime = (dateStr) => {
-    if (!dateStr) return '';
-    const date = new Date(dateStr);
-    const now = new Date();
-    const diffMs = now - date;
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-    if (diffDays === 0) {
-      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    } else if (diffDays === 1) {
-      return 'Yesterday';
-    } else if (diffDays < 7) {
-      return date.toLocaleDateString([], { weekday: 'short' });
-    }
-    return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
-  };
-
-  // Merge contacts and conversations into a unified list
-  const allContacts = [...conversations];
-  contacts.forEach(contact => {
-    const existing = allContacts.find(c => c.id === contact.id);
-    if (existing) {
-      // Carry over chatEnded from contacts API
-      existing.chatEnded = contact.chatEnded || false;
-    } else {
-      allContacts.push({ ...contact, lastMessage: null, unreadCount: 0, chatEnded: contact.chatEnded || false });
-    }
-  });
+  const isDoctorUser = user?.role === 'DOCTOR';
 
   return (
-    <div className="chats-fullscreen">
-      <style dangerouslySetInnerHTML={{ __html: `
-        .chats-fullscreen {
-          position: fixed;
-          top: 60px;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          display: flex;
-          background: #f8fafc;
-          z-index: 50;
-          font-family: var(--font-primary);
-        }
-
-        .chat-sidebar {
-          width: 320px;
-          background: white;
-          border-right: 1px solid #e2e8f0;
-          display: flex;
-          flex-direction: column;
-          flex-shrink: 0;
-        }
-
-        .chat-sidebar-header {
-          padding: 1.25rem 1.5rem;
-          border-bottom: 1px solid #e2e8f0;
-        }
-
-        .chat-sidebar-header h2 {
-          font-size: 1.2rem;
-          font-weight: 700;
-          color: var(--text-primary);
-          margin: 0;
-        }
-
-        .chat-sidebar-header p {
-          font-size: 0.8rem;
-          color: var(--text-muted);
-          margin: 4px 0 0 0;
-        }
-
-        .chat-contact-list {
-          flex: 1;
-          overflow-y: auto;
-          padding: 0.5rem;
-        }
-
-        .chat-contact-item {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          padding: 0.85rem 1rem;
-          border-radius: 12px;
-          cursor: pointer;
-          transition: all 0.15s ease;
-          margin-bottom: 2px;
-        }
-
-        .chat-contact-item:hover {
-          background: #f1f5f9;
-        }
-
-        .chat-contact-item.active {
-          background: var(--primary-glow, #ccfbf1);
-          border-left: 3px solid var(--primary);
-        }
-
-        .chat-avatar {
-          position: relative;
-          width: 44px;
-          height: 44px;
-          border-radius: 50%;
-          background: linear-gradient(135deg, var(--primary), #0f766e);
-          color: white;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-weight: 700;
-          font-size: 0.9rem;
-          flex-shrink: 0;
-        }
-
-        .chat-avatar .online-dot {
-          position: absolute;
-          bottom: 1px;
-          right: 1px;
-          width: 10px;
-          height: 10px;
-          border-radius: 50%;
-          background: #10b981;
-          border: 2px solid white;
-        }
-
-        .chat-contact-info {
-          flex: 1;
-          min-width: 0;
-        }
-
-        .chat-contact-name {
-          font-size: 0.9rem;
-          font-weight: 600;
-          color: var(--text-primary);
-          margin: 0;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-
-        .chat-contact-preview {
-          font-size: 0.78rem;
-          color: var(--text-muted);
-          margin: 3px 0 0 0;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-
-        .chat-contact-meta {
-          display: flex;
-          flex-direction: column;
-          align-items: flex-end;
-          gap: 4px;
-        }
-
-        .chat-contact-time {
-          font-size: 0.7rem;
-          color: var(--text-muted);
-        }
-
-        .chat-unread-badge {
-          width: 20px;
-          height: 20px;
-          border-radius: 50%;
-          background: var(--primary);
-          color: white;
-          font-size: 0.65rem;
-          font-weight: 700;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        }
-
-        .chat-main {
-          flex: 1;
-          display: flex;
-          flex-direction: column;
-          background: white;
-          min-width: 0;
-        }
-
-        .chat-main-header {
-          padding: 1rem 1.5rem;
-          border-bottom: 1px solid #e2e8f0;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          background: white;
-        }
-
-        .chat-main-header-left {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-        }
-
-        .chat-main-header-name {
-          font-size: 1rem;
-          font-weight: 700;
-          color: var(--text-primary);
-          margin: 0;
-        }
-
-        .chat-main-header-status {
-          font-size: 0.75rem;
-          color: #10b981;
-          margin: 2px 0 0 0;
-        }
-
-        .chat-messages-area {
-          flex: 1;
-          overflow-y: auto;
-          padding: 1.5rem;
-          display: flex;
-          flex-direction: column;
-          gap: 0.75rem;
-          background: #f8fafc;
-        }
-
-        .chat-msg-row {
-          display: flex;
-          flex-direction: column;
-          max-width: 70%;
-        }
-
-        .chat-msg-row.sent {
-          align-self: flex-end;
-          align-items: flex-end;
-        }
-
-        .chat-msg-row.received {
-          align-self: flex-start;
-          align-items: flex-start;
-        }
-
-        .chat-msg-meta {
-          font-size: 0.68rem;
-          color: var(--text-muted);
-          margin-bottom: 3px;
-          padding: 0 6px;
-        }
-
-        .chat-msg-bubble {
-          padding: 0.7rem 1rem;
-          border-radius: 16px;
-          font-size: 0.88rem;
-          line-height: 1.45;
-          word-break: break-word;
-        }
-
-        .chat-msg-row.sent .chat-msg-bubble {
-          background: var(--primary);
-          color: white;
-          border-bottom-right-radius: 4px;
-        }
-
-        .chat-msg-row.received .chat-msg-bubble {
-          background: white;
-          color: var(--text-primary);
-          border: 1px solid #e2e8f0;
-          border-bottom-left-radius: 4px;
-        }
-
-        .chat-typing-indicator {
-          align-self: flex-start;
-          padding: 0.5rem 1rem;
-          background: white;
-          border: 1px solid #e2e8f0;
-          border-radius: 16px;
-          font-size: 0.8rem;
-          color: var(--text-muted);
-          font-style: italic;
-        }
-
-        .chat-msg-row.system {
-          align-self: center;
-          max-width: 80%;
-        }
-
-        .chat-msg-system {
-          background: #f1f5f9;
-          border: 1px solid #e2e8f0;
-          border-radius: 12px;
-          padding: 0.5rem 1rem;
-          font-size: 0.78rem;
-          color: #64748b;
-          text-align: center;
-          font-style: italic;
-        }
-
-        .chat-input-bar {
-          padding: 1rem 1.5rem;
-          border-top: 1px solid #e2e8f0;
-          display: flex;
-          gap: 0.75rem;
-          align-items: center;
-          background: white;
-        }
-
-        .chat-input-field {
-          flex: 1;
-          border: 1px solid #e2e8f0;
-          border-radius: 24px;
-          padding: 0.65rem 1.25rem;
-          font-size: 0.9rem;
-          outline: none;
-          transition: border-color 0.2s;
-          font-family: var(--font-primary);
-        }
-
-        .chat-input-field:focus {
-          border-color: var(--primary);
-          box-shadow: 0 0 0 3px rgba(13,148,136,0.1);
-        }
-
-        .chat-send-btn {
-          width: 42px;
-          height: 42px;
-          border-radius: 50%;
-          background: var(--primary);
-          color: white;
-          border: none;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          cursor: pointer;
-          transition: background 0.2s;
-        }
-
-        .chat-send-btn:hover {
-          background: var(--primary-hover, #0f766e);
-        }
-
-        .chat-send-btn:disabled {
-          background: #cbd5e1;
-          cursor: not-allowed;
-        }
-
-        .chat-empty-state {
-          flex: 1;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          color: var(--text-muted);
-          gap: 1rem;
-          padding: 2rem;
-        }
-
-        .chat-empty-state svg {
-          opacity: 0.4;
-        }
-
-        .chat-empty-state h3 {
-          font-size: 1.1rem;
-          color: var(--text-secondary);
-          margin: 0;
-        }
-
-        .chat-empty-state p {
-          font-size: 0.85rem;
-          max-width: 300px;
-          text-align: center;
-          line-height: 1.5;
-        }
-
-        .chat-loading {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 2rem;
-          color: var(--text-muted);
-          font-size: 0.85rem;
-        }
-
-        @media (max-width: 768px) {
-          .chat-sidebar {
-            width: 100%;
-            display: ${selectedContact ? 'none' : 'flex'};
-          }
-          .chat-main {
-            display: ${selectedContact ? 'flex' : 'none'};
-          }
-        }
-      `}} />
-
-      {/* Sidebar - Contact list */}
-      <div className="chat-sidebar">
-        <div className="chat-sidebar-header">
-          <h2>Messages</h2>
-          <p>{allContacts.length} conversation{allContacts.length !== 1 ? 's' : ''}</p>
-        </div>
-        <div className="chat-contact-list">
-          {loadingContacts ? (
-            <div className="chat-loading">Loading contacts...</div>
-          ) : allContacts.length === 0 ? (
-            <div className="chat-loading" style={{ flexDirection: 'column', gap: '0.5rem', textAlign: 'center', padding: '2rem 1rem' }}>
-              <p>No conversations yet</p>
-              <p style={{ fontSize: '0.75rem' }}>
-                {user?.role === 'PATIENT' 
-                  ? 'Book an appointment with a doctor to start chatting' 
-                  : 'Your patients will appear here once they book appointments'}
-              </p>
-            </div>
-          ) : (
-            allContacts.map(contact => (
-              <div
-                key={contact.id}
-                className={`chat-contact-item ${selectedContact?.id === contact.id ? 'active' : ''}`}
-                onClick={() => selectContact(contact)}
+    <div style={styles.container}>
+      {/* Left pane: Conversations list */}
+      <div style={styles.sidebar}>
+        <div style={styles.sidebarHeader}>
+          <h2 style={styles.sidebarTitle}>Messages</h2>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            {isDoctorUser && (
+              <button
+                style={styles.newChatBtn}
+                onClick={() => setShowCreateGroupModal(true)}
+                title="Create Group Chat"
               >
-                <div className="chat-avatar">
-                  {getInitials(contact.name)}
-                  {onlineUsers[contact.id] && <div className="online-dot" />}
-                </div>
-                <div className="chat-contact-info">
-                  <p className="chat-contact-name">{contact.name}</p>
-                  <p className="chat-contact-preview">
-                    {contact.lastMessage 
-                      ? `${contact.lastMessage.isMine ? 'You: ' : ''}${contact.lastMessage.content}`
-                      : contact.specialization || contact.role?.toLowerCase()
-                    }
-                  </p>
-                </div>
-                <div className="chat-contact-meta">
-                  {contact.lastMessage?.time && (
-                    <span className="chat-contact-time">{formatTime(contact.lastMessage.time)}</span>
-                  )}
-                  {contact.unreadCount > 0 && (
-                    <div className="chat-unread-badge">{contact.unreadCount}</div>
-                  )}
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-
-      {/* Main chat area */}
-      <div className="chat-main">
-        {!selectedContact ? (
-          <div className="chat-empty-state">
-            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-            </svg>
-            <h3>Select a conversation</h3>
-            <p>Choose a contact from the sidebar to start messaging. Messages are delivered in real-time across all your devices.</p>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                  <circle cx="9" cy="7" r="4" />
+                  <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                </svg>
+              </button>
+            )}
+            <button
+              style={styles.newChatBtn}
+              onClick={() => setShowContactsPanel(!showContactsPanel)}
+              title="Start new conversation"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+              </svg>
+            </button>
           </div>
-        ) : (
-          <>
-            {/* Header */}
-            <div className="chat-main-header">
-              <div className="chat-main-header-left">
-                <div className="chat-avatar" style={{ width: 38, height: 38, fontSize: '0.8rem' }}>
-                  {getInitials(selectedContact.name)}
-                  {onlineUsers[selectedContact.id] && <div className="online-dot" />}
-                </div>
-                <div>
-                  <p className="chat-main-header-name">{selectedContact.name}</p>
-                  <p className="chat-main-header-status" style={{ color: onlineUsers[selectedContact.id] ? '#10b981' : '#94a3b8' }}>
-                    {onlineUsers[selectedContact.id] ? '● Online' : '○ Offline'}
-                  </p>
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                {/* Voice Call Button */}
-                <button
-                  type="button"
-                  onClick={() => alert('Voice call feature coming soon in Step 2')}
-                  style={{
-                    width: 38, height: 38, borderRadius: '50%', border: 'none',
-                    background: '#f1f5f9', color: '#334155', cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    transition: 'all 0.2s'
-                  }}
-                  title="Voice Call"
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
-                  </svg>
-                </button>
-                {/* Video Call Button */}
-                <button
-                  type="button"
-                  onClick={() => alert('Video call feature coming soon in Step 2')}
-                  style={{
-                    width: 38, height: 38, borderRadius: '50%', border: 'none',
-                    background: '#f1f5f9', color: '#334155', cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    transition: 'all 0.2s'
-                  }}
-                  title="Video Call"
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                    <path d="M23 7l-7 5 7 5V7z" />
-                    <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
-                  </svg>
-                </button>
-                {/* Mobile back button */}
-                <button 
-                  onClick={() => setSelectedContact(null)}
-                  style={{ 
-                    display: 'none', 
-                    background: 'none', 
-                    border: 'none', 
-                    color: 'var(--primary)', 
-                    fontSize: '0.85rem', 
-                    cursor: 'pointer',
-                    fontWeight: '600'
-                  }}
-                  className="chat-back-btn"
-                >
-                  ← Back
-                </button>
-              </div>
-            </div>
+        </div>
 
-            {/* Messages */}
-            <div className="chat-messages-area">
-              {loadingMessages ? (
-                <div className="chat-loading">Loading messages...</div>
-              ) : messages.length === 0 ? (
-                <div className="chat-empty-state" style={{ opacity: 0.6 }}>
-                  <p>No messages yet. Say hello!</p>
-                </div>
-              ) : (
-                messages.map(msg => (
-                  <div
-                    key={msg.id}
-                    className={`chat-msg-row ${msg.messageType === 'system' ? 'system' : (msg.senderId === user.id ? 'sent' : 'received')}`}
-                  >
-                    {msg.messageType === 'system' ? (
-                      <div className="chat-msg-system">{msg.content}</div>
-                    ) : (
-                      <>
-                        <div className="chat-msg-meta">
-                          {msg.sender?.name || (msg.senderId === user.id ? user.name : selectedContact.name)} • {formatTime(msg.createdAt)}
-                        </div>
-                        <div className="chat-msg-bubble">{msg.content}</div>
-                      </>
-                    )}
-                  </div>
-                ))
-              )}
-              {typing && (
-                <div className="chat-typing-indicator">
-                  {typing} is typing...
-                </div>
-              )}
-              <div ref={messagesEndRef} />
+        {showContactsPanel ? (
+          /* Custom contacts panel — appointment-based contacts from our backend */
+          <div style={styles.contactsPanel}>
+            <div style={styles.contactsPanelHeader}>
+              <span style={styles.contactsPanelTitle}>Your Contacts</span>
+              <button
+                style={styles.contactsBackBtn}
+                onClick={() => setShowContactsPanel(false)}
+              >
+                ← Back
+              </button>
             </div>
-
-            {/* Input */}
-            {selectedContact.chatEnded ? (
-              <div className="chat-input-bar" style={{ justifyContent: 'center', background: '#f1f5f9' }}>
-                <span style={{ color: '#94a3b8', fontSize: '0.85rem', fontWeight: '500' }}>This chat has ended — appointment was cancelled</span>
+            {loadingContacts ? (
+              <div style={styles.loadingBox}>Loading contacts...</div>
+            ) : contacts.length === 0 ? (
+              <div style={styles.loadingBox}>
+                <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b' }}>
+                  {user?.role === 'PATIENT'
+                    ? 'Book an appointment with a doctor to start chatting'
+                    : 'Your patients will appear here once they book appointments'}
+                </p>
               </div>
             ) : (
-              <form className="chat-input-bar" onSubmit={handleSend}>
-                <input
-                  type="text"
-                  className="chat-input-field"
-                  placeholder={`Message ${selectedContact.name}...`}
-                  value={textVal}
-                  onChange={handleInputChange}
-                  autoFocus
-                />
-                <button 
-                  type="submit" 
-                  className="chat-send-btn"
-                  disabled={!textVal.trim()}
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                    <line x1="22" y1="2" x2="11" y2="13" />
-                    <polygon points="22 2 15 22 11 13 2 9 22 2" />
-                  </svg>
-                </button>
-              </form>
+              <div style={styles.contactsList}>
+                {contacts.map((contact) => (
+                  <div
+                    key={contact.id}
+                    style={styles.contactItem}
+                    onClick={() => handleContactClick(contact)}
+                  >
+                    <div style={styles.contactAvatar}>
+                      {getInitials(contact.name)}
+                    </div>
+                    <div style={styles.contactInfo}>
+                      <p style={styles.contactName}>{contact.name}</p>
+                      <p style={styles.contactSub}>
+                        {contact.specialization || contact.role?.toLowerCase()}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
-          </>
+          </div>
+        ) : (
+          /* CometChat built-in conversation list with real-time updates */
+          <div style={styles.conversationsList}>
+            <CometChatConversations
+              onItemClick={handleConversationClick}
+              activeConversation={selectedConversation}
+            />
+          </div>
         )}
       </div>
+
+      {/* Right pane: Active chat */}
+      <div style={styles.mainPanel}>
+          {!selectedUser && !selectedGroup ? (
+          <div style={styles.emptyContainer}>
+            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ opacity: 0.4 }}>
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            </svg>
+            <h3 style={styles.emptyTitle}>Select a conversation</h3>
+            <p style={styles.emptyText}>
+              Choose a contact from the sidebar to start messaging. Messages are delivered in real-time with typing indicators and read receipts.
+            </p>
+          </div>
+        ) : (() => {
+          if (selectedGroup) {
+            return (
+              <div style={styles.chatArea}>
+                <div style={styles.messageHeader}>
+                  <CometChatMessageHeader
+                    group={selectedGroup}
+                    {...(!isDoctorUser && { hideVideoCallButton: true, hideVoiceCallButton: true })}
+                    {...(isDoctorUser && { auxiliaryButtonView: () => <CometChatCallButtons group={selectedGroup} /> })}
+                  />
+                  {isDoctorUser && selectedGroup && selectedGroup.getOwner() === cometChatUid && (
+                    <div style={styles.groupActions}>
+                      <button style={styles.actionBtn} onClick={() => setShowAddMemberModal(true)}>+ Add</button>
+                      <button style={styles.actionBtn} onClick={fetchGroupMembers}>Manage</button>
+                      <button style={styles.dangerBtn} onClick={handleDeleteGroup}>Delete</button>
+                    </div>
+                  )}
+                  {/* Mobile back button */}
+                  <button
+                    style={styles.mobileBackBtn}
+                    onClick={() => {
+                      setSelectedGroup(null);
+                      setSelectedConversation(null);
+                    }}
+                  >
+                    ←
+                  </button>
+                </div>
+
+                <div style={styles.messageList}>
+                  <CometChatMessageList group={selectedGroup} />
+                </div>
+
+                <div style={styles.messageComposer}>
+                  <CometChatMessageComposer group={selectedGroup} />
+                </div>
+              </div>
+            );
+          }
+
+          const isPatientDoctorChat = selectedUser
+            ? ((user?.role === 'PATIENT' && selectedUser.getRole() === 'doctor') ||
+               (user?.role === 'DOCTOR' && selectedUser.getRole() === 'patient'))
+            : false;
+          const matchedContact = selectedUser
+            ? contacts.find(c => c.id === selectedUser.getUid() || c.cometChatUid === selectedUser.getUid())
+            : null;
+          const isChatAllowed = !isPatientDoctorChat || (matchedContact && !matchedContact.chatEnded);
+
+          return (
+            <div style={styles.chatArea}>
+              {/* Message header — shows name, presence, and call buttons */}
+              <div style={styles.messageHeader}>
+                <CometChatMessageHeader
+                  user={selectedUser}
+                  {...((!isDoctorUser || !isChatAllowed) && { hideVideoCallButton: true, hideVoiceCallButton: true })}
+                />
+                {/* Mobile back button */}
+                <button
+                  style={styles.mobileBackBtn}
+                  onClick={() => {
+                    setSelectedUser(null);
+                    setSelectedConversation(null);
+                  }}
+                >
+                  ←
+                </button>
+              </div>
+
+              {/* Message list */}
+              <div style={styles.messageList}>
+                <CometChatMessageList user={selectedUser} />
+              </div>
+
+              {/* Message composer */}
+              {isChatAllowed ? (
+                <div style={styles.messageComposer}>
+                  <CometChatMessageComposer user={selectedUser} />
+                </div>
+              ) : (
+                <div style={styles.gatedComposerBanner}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0 }}>
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                  </svg>
+                  <span>This consultation chat is closed or request is pending.</span>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+      </div>
+
+      {/* Modals */}
+      {showCreateGroupModal && (
+        <div style={styles.modalOverlay}>
+          <div style={styles.modalContent}>
+            <h3 style={styles.modalTitle}>Create Group Chat</h3>
+            <form onSubmit={handleCreateGroup}>
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>Group Name</label>
+                <input
+                  type="text"
+                  style={styles.formInput}
+                  value={groupName}
+                  onChange={(e) => setGroupName(e.target.value)}
+                  placeholder="e.g. Cardiology Discussion"
+                  required
+                />
+              </div>
+
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>Select Members (Doctors & Patients)</label>
+                <div style={styles.membersChecklist}>
+                  {contacts.map((contact) => (
+                    <label key={contact.id} style={styles.checklistLabel}>
+                      <input
+                        type="checkbox"
+                        checked={selectedMembers.includes(contact.cometChatUid)}
+                        onChange={() => toggleMemberSelection(contact.cometChatUid)}
+                        style={{ marginRight: '8px' }}
+                      />
+                      <span>{contact.name} ({contact.specialization || contact.role?.toLowerCase()})</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div style={styles.modalActions}>
+                <button type="button" style={styles.modalCancelBtn} onClick={() => { setShowCreateGroupModal(false); setSelectedMembers([]); setGroupName(''); }}>Cancel</button>
+                <button type="submit" style={styles.modalSubmitBtn}>Create</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showAddMemberModal && (
+        <div style={styles.modalOverlay}>
+          <div style={styles.modalContent}>
+            <h3 style={styles.modalTitle}>Add Member to Group</h3>
+            <div style={styles.membersChecklist}>
+              {contacts.map((contact) => (
+                <div key={contact.id} style={styles.checklistRow}>
+                  <span>{contact.name}</span>
+                  <button
+                    style={styles.actionBtn}
+                    onClick={() => handleAddMember(contact.cometChatUid)}
+                  >
+                    Add
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div style={styles.modalActions}>
+              <button style={styles.modalCancelBtn} onClick={() => setShowAddMemberModal(false)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showManageMembersModal && (
+        <div style={styles.modalOverlay}>
+          <div style={styles.modalContent}>
+            <h3 style={styles.modalTitle}>Manage Group Members</h3>
+            <div style={styles.membersChecklist}>
+              {groupMembers.map((member) => (
+                <div key={member.getUid()} style={styles.checklistRow}>
+                  <span>{member.getName()} ({member.getRole()})</span>
+                  {member.getUid() !== cometChatUid && (
+                    <button
+                      style={styles.dangerBtn}
+                      onClick={() => handleRemoveMember(member.getUid())}
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+            <div style={styles.modalActions}>
+              <button style={styles.modalCancelBtn} onClick={() => setShowManageMembersModal(false)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
+};
+
+// ─── HELPERS ─────────────────────────────────────────────────────────────────
+
+function getInitials(name) {
+  if (!name) return '?';
+  const parts = name.replace(/^dr\.\s+/i, '').trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+// ─── STYLES ──────────────────────────────────────────────────────────────────
+
+const styles = {
+  container: {
+    position: 'fixed',
+    top: '60px',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    display: 'flex',
+    background: '#f8fafc',
+    zIndex: 50,
+    fontFamily: 'var(--font-primary)',
+  },
+  sidebar: {
+    width: '340px',
+    background: 'white',
+    borderRight: '1px solid #e2e8f0',
+    display: 'flex',
+    flexDirection: 'column',
+    flexShrink: 0,
+    overflow: 'hidden',
+  },
+  sidebarHeader: {
+    padding: '1rem 1.25rem',
+    borderBottom: '1px solid #e2e8f0',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  sidebarTitle: {
+    fontSize: '1.15rem',
+    fontWeight: 700,
+    color: '#0f172a',
+    margin: 0,
+  },
+  newChatBtn: {
+    width: '34px',
+    height: '34px',
+    borderRadius: '50%',
+    border: 'none',
+    background: '#f1f5f9',
+    color: '#334155',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transition: 'background 0.2s',
+  },
+  conversationsList: {
+    flex: 1,
+    overflow: 'hidden',
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  contactsPanel: {
+    flex: 1,
+    overflow: 'hidden',
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  contactsPanelHeader: {
+    padding: '0.75rem 1.25rem',
+    borderBottom: '1px solid #e2e8f0',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  contactsPanelTitle: {
+    fontSize: '0.85rem',
+    fontWeight: 600,
+    color: '#334155',
+  },
+  contactsBackBtn: {
+    background: 'none',
+    border: 'none',
+    color: '#0d9488',
+    fontSize: '0.8rem',
+    fontWeight: 600,
+    cursor: 'pointer',
+  },
+  contactsList: {
+    flex: 1,
+    overflowY: 'auto',
+    padding: '0.5rem',
+  },
+  contactItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    padding: '0.75rem 1rem',
+    borderRadius: '10px',
+    cursor: 'pointer',
+    transition: 'background 0.15s',
+    marginBottom: '2px',
+  },
+  contactAvatar: {
+    width: '40px',
+    height: '40px',
+    borderRadius: '50%',
+    background: 'linear-gradient(135deg, #0d9488, #0f766e)',
+    color: 'white',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontWeight: 700,
+    fontSize: '0.85rem',
+    flexShrink: 0,
+  },
+  contactInfo: {
+    flex: 1,
+    minWidth: 0,
+  },
+  contactName: {
+    fontSize: '0.88rem',
+    fontWeight: 600,
+    color: '#0f172a',
+    margin: 0,
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+  },
+  contactSub: {
+    fontSize: '0.75rem',
+    color: '#64748b',
+    margin: '2px 0 0 0',
+  },
+  loadingBox: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '2rem 1rem',
+    color: '#64748b',
+    fontSize: '0.85rem',
+    textAlign: 'center',
+  },
+  mainPanel: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    background: 'white',
+    minWidth: 0,
+    overflow: 'hidden',
+  },
+  emptyContainer: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: '#64748b',
+    gap: '1rem',
+    padding: '2rem',
+  },
+  emptyTitle: {
+    fontSize: '1.1rem',
+    color: '#334155',
+    margin: 0,
+  },
+  emptyText: {
+    fontSize: '0.85rem',
+    maxWidth: '320px',
+    textAlign: 'center',
+    lineHeight: 1.5,
+    margin: 0,
+  },
+  spinner: {
+    width: '32px',
+    height: '32px',
+    border: '3px solid #e2e8f0',
+    borderTop: '3px solid #0d9488',
+    borderRadius: '50%',
+    animation: 'spin 0.8s linear infinite',
+  },
+  chatArea: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
+    minHeight: 0,
+  },
+  messageHeader: {
+    borderBottom: '1px solid #e2e8f0',
+    position: 'relative',
+  },
+  messageList: {
+    flex: 1,
+    overflow: 'hidden',
+    display: 'flex',
+    flexDirection: 'column',
+    minHeight: 0,
+  },
+  messageComposer: {
+    borderTop: '1px solid #e2e8f0',
+  },
+  mobileBackBtn: {
+    position: 'absolute',
+    left: '8px',
+    top: '50%',
+    transform: 'translateY(-50%)',
+    background: 'none',
+    border: 'none',
+    color: '#0d9488',
+    fontSize: '1.2rem',
+    fontWeight: 700,
+    cursor: 'pointer',
+    display: 'none', // shown via media query
+  },
+  gatedComposerBanner: {
+    padding: '1.25rem',
+    background: '#fef2f2',
+    color: '#b91c1c',
+    borderTop: '1px solid #fee2e2',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '0.9rem',
+    fontWeight: 600,
+    gap: '0.5rem',
+  },
+  groupActions: {
+    position: 'absolute',
+    right: '16px',
+    top: '50%',
+    transform: 'translateY(-50%)',
+    display: 'flex',
+    gap: '8px',
+    zIndex: 10,
+  },
+  actionBtn: {
+    padding: '6px 12px',
+    borderRadius: '6px',
+    border: '1px solid #e2e8f0',
+    background: 'white',
+    color: '#0f172a',
+    fontSize: '0.8rem',
+    fontWeight: '600',
+    cursor: 'pointer',
+    transition: 'background 0.2s',
+  },
+  dangerBtn: {
+    padding: '6px 12px',
+    borderRadius: '6px',
+    border: '1px solid #fee2e2',
+    background: '#fef2f2',
+    color: '#991b1b',
+    fontSize: '0.8rem',
+    fontWeight: '600',
+    cursor: 'pointer',
+    transition: 'background 0.2s',
+  },
+  modalOverlay: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    background: 'rgba(0, 0, 0, 0.4)',
+    backdropFilter: 'blur(4px)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1000,
+  },
+  modalContent: {
+    background: 'white',
+    borderRadius: '12px',
+    width: '450px',
+    maxWidth: '90%',
+    padding: '24px',
+    boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
+  },
+  modalTitle: {
+    fontSize: '1.2rem',
+    fontWeight: 700,
+    color: '#0f172a',
+    margin: '0 0 16px 0',
+  },
+  formGroup: {
+    marginBottom: '16px',
+  },
+  formLabel: {
+    display: 'block',
+    fontSize: '0.85rem',
+    fontWeight: 600,
+    color: '#475569',
+    marginBottom: '6px',
+  },
+  formInput: {
+    width: '100%',
+    padding: '8px 12px',
+    borderRadius: '6px',
+    border: '1px solid #cbd5e1',
+    fontSize: '0.9rem',
+    outline: 'none',
+    boxSizing: 'border-box',
+  },
+  membersChecklist: {
+    maxHeight: '200px',
+    overflowY: 'auto',
+    border: '1px solid #e2e8f0',
+    borderRadius: '6px',
+    padding: '8px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
+  },
+  checklistLabel: {
+    display: 'flex',
+    alignItems: 'center',
+    fontSize: '0.85rem',
+    color: '#334155',
+    cursor: 'pointer',
+    padding: '4px',
+    borderRadius: '4px',
+    transition: 'background 0.2s',
+  },
+  checklistRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    fontSize: '0.85rem',
+    color: '#334155',
+    padding: '6px 8px',
+    borderRadius: '6px',
+    background: '#f8fafc',
+  },
+  modalActions: {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    gap: '8px',
+    marginTop: '20px',
+  },
+  modalCancelBtn: {
+    padding: '8px 16px',
+    borderRadius: '6px',
+    border: '1px solid #e2e8f0',
+    background: 'white',
+    color: '#334155',
+    fontSize: '0.85rem',
+    fontWeight: 600,
+    cursor: 'pointer',
+  },
+  modalSubmitBtn: {
+    padding: '8px 16px',
+    borderRadius: '6px',
+    border: 'none',
+    background: '#0d9488',
+    color: 'white',
+    fontSize: '0.85rem',
+    fontWeight: 600,
+    cursor: 'pointer',
+  },
 };
 
 export default Chats;
