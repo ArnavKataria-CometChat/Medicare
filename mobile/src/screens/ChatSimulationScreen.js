@@ -310,11 +310,6 @@ const ChatSimulationScreen = ({ route, navigation }) => {
                 hideVideoCallButton={!isDoctorUser}
                 hideVoiceCallButton={!isDoctorUser}
               />
-              {isDoctorUser && ccGroup && CometChatCallButtons && (
-                <View style={styles.groupCallButtons}>
-                  <CometChatCallButtons group={ccGroup} />
-                </View>
-              )}
             </>
           )}
         </View>

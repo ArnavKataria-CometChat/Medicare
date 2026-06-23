@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { CometChatUIKit, UIKitSettingsBuilder, CometChatIncomingCall } from '@cometchat/chat-uikit-react';
+import { CometChatUIKit, UIKitSettingsBuilder, CometChatIncomingCall, CometChatOutgoingCall, CometChatOngoingCall } from '@cometchat/chat-uikit-react';
 import { CometChatCalls } from '@cometchat/calls-sdk-javascript';
 import { CometChat } from '@cometchat/chat-sdk-javascript';
 import { formatCometChatError, logCometChatError } from './errors';
@@ -280,7 +280,9 @@ export function CometChatProvider({ token, user, children }) {
           `}</style>
           <div className="cometchat-call-overlay">
             <CometChatIncomingCall />
+            <CometChatOutgoingCall />
           </div>
+          <CometChatOngoingCall />
           <OngoingCallElevator />
           <CometChatNotifier isReady={isReady} addToast={addToast} />
         </>
