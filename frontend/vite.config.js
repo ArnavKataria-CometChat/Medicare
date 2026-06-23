@@ -3,6 +3,19 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
+  optimizeDeps: {
+    include: [
+      '@cometchat/calls-sdk-javascript',
+      '@cometchat/chat-uikit-react',
+      '@cometchat/chat-sdk-javascript',
+    ],
+  },
+  build: {
+    commonjsOptions: {
+      include: [/node_modules/],
+      transformMixedEsModules: true,
+    },
+  },
   server: {
     port: 3000,
     proxy: {

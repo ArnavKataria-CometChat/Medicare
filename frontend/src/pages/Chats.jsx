@@ -315,7 +315,6 @@ const Chats = ({ navigate }) => {
                   <CometChatMessageHeader
                     group={selectedGroup}
                     {...(!isDoctorUser && { hideVideoCallButton: true, hideVoiceCallButton: true })}
-                    {...(isDoctorUser && { auxiliaryButtonView: () => <CometChatCallButtons group={selectedGroup} /> })}
                   />
                   {isDoctorUser && selectedGroup && selectedGroup.getOwner() === cometChatUid && (
                     <div style={styles.groupActions}>
