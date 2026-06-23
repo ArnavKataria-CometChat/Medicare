@@ -27,6 +27,7 @@ const Chats = ({ navigate }) => {
   const [groupMembers, setGroupMembers] = useState([]);
   const [groupName, setGroupName] = useState('');
   const [selectedMembers, setSelectedMembers] = useState([]);
+  const [showGroupMenu, setShowGroupMenu] = useState(false);
 
   const toggleMemberSelection = (uid) => {
     setSelectedMembers(prev =>
