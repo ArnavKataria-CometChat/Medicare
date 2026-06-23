@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { CometChatUIKit, UIKitSettingsBuilder, CometChatIncomingCall, CometChatOutgoingCall } from '@cometchat/chat-uikit-react';
+import { CometChatUIKit, UIKitSettingsBuilder, CometChatIncomingCall } from '@cometchat/chat-uikit-react';
 import { CometChatCalls } from '@cometchat/calls-sdk-javascript';
 import { CometChat } from '@cometchat/chat-sdk-javascript';
 import { formatCometChatError, logCometChatError } from './errors';
@@ -21,16 +21,11 @@ function OngoingCallElevator() {
 
     let active = false;
     let pollInterval = null;
-    let pollTimeout = null;
 
     function hideOverlay() {
       overlay.style.display = 'none';
       while (overlay.firstChild) overlay.removeChild(overlay.firstChild);
       active = false;
-      if (pollTimeout) {
-        clearTimeout(pollTimeout);
-        pollTimeout = null;
-      }
       if (pollInterval) {
         clearInterval(pollInterval);
         pollInterval = null;
@@ -41,20 +36,16 @@ function OngoingCallElevator() {
       if (active) return; // Already showing — let the poll handle cleanup
       const el = document.querySelector('.cometchat-ongoing-call:not(.cometchat-call-elevator .cometchat-ongoing-call)');
       if (el) {
-        // Grab the parent .cometchat wrapper if it exists, so styles are preserved
-        const target = el.closest('.cometchat') || el;
         active = true;
         overlay.style.display = 'block';
-        overlay.appendChild(target);
-        // Wait 5s before polling to give the call iframe time to load
-        pollTimeout = setTimeout(() => {
-          pollInterval = setInterval(() => {
-            const callEl = overlay.querySelector('.cometchat-ongoing-call');
-            if (!callEl || (!callEl.querySelector('iframe') && !callEl.querySelector('[class*="call"]'))) {
-              hideOverlay();
-            }
-          }, 500);
-        }, 5000);
+        overlay.appendChild(el);
+        // Poll every 500ms to check if call ended (iframe removed from inside the element)
+        pollInterval = setInterval(() => {
+          const callEl = overlay.querySelector('.cometchat-ongoing-call');
+          if (!callEl || (!callEl.querySelector('iframe') && !callEl.querySelector('[class*="call"]'))) {
+            hideOverlay();
+          }
+        }, 500);
       }
     });
 
@@ -62,7 +53,6 @@ function OngoingCallElevator() {
 
     return () => {
       observer.disconnect();
-      if (pollTimeout) clearTimeout(pollTimeout);
       if (pollInterval) clearInterval(pollInterval);
       overlay.remove();
     };
@@ -290,7 +280,6 @@ export function CometChatProvider({ token, user, children }) {
           `}</style>
           <div className="cometchat-call-overlay">
             <CometChatIncomingCall />
-            <CometChatOutgoingCall />
           </div>
           <OngoingCallElevator />
           <CometChatNotifier isReady={isReady} addToast={addToast} />
