@@ -292,7 +292,7 @@ const Layout = ({ children, currentPath, navigate }) => {
         </div>
       </footer>}
 
-      {isAuthenticated && <AIAssistant navigate={navigate} />}
+      {isAuthenticated && currentPath !== '/chats' && <AIAssistant navigate={navigate} />}
     </div>
   );
 };
