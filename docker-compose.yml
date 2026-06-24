@@ -24,20 +24,29 @@ services:
     container_name: medicare-app
     restart: unless-stopped
     ports:
-      # Bind to localhost only — nginx (on the same host) proxies to it.
-      - "127.0.0.1:5000:5000"
+      # Bind to localhost only — nginx/ALB on the same host reverse-proxies to this.
+      # For local dev/testing with mobile over LAN, override with:
+      #   APP_BIND=0.0.0.0 docker compose up -d
+      - "${APP_BIND:-127.0.0.1}:5000:5000"
     environment:
       PORT: 5000
       NODE_ENV: production
+      # Database
       DB_USER: ${DB_USER:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:-postgres}
       DB_HOST: db
       DB_PORT: 5432
       DB_NAME: ${DB_NAME:-medicare}
+      # Security
       JWT_SECRET: ${JWT_SECRET}
+      # CORS — set to your production domain (e.g. https://medicare.cometchat-staging.com)
+      CORS_ORIGIN: ${CORS_ORIGIN:-*}
+      # Web Push (VAPID)
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      # Firebase Cloud Messaging (mobile push)
       FIREBASE_SERVICE_ACCOUNT: ${FIREBASE_SERVICE_ACCOUNT:-}
+      # CometChat
       COMETCHAT_APP_ID: ${COMETCHAT_APP_ID:-}
       COMETCHAT_REGION: ${COMETCHAT_REGION:-}
       COMETCHAT_AUTH_KEY: ${COMETCHAT_AUTH_KEY:-}

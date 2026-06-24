@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useToast } from '../context/ToastContext';
+import Markdown from '../components/Markdown';
 
 const ArticleDetail = ({ navigate, articleId }) => {
   const { addToast } = useToast();
@@ -80,11 +81,10 @@ const ArticleDetail = ({ navigate, articleId }) => {
           style={{
             lineHeight: '1.8',
             fontSize: '1.1rem',
-            color: 'var(--text-primary)',
-            whiteSpace: 'pre-wrap' // Preserves formatting from seeds
+            color: 'var(--text-primary)'
           }}
         >
-          {article.content}
+          <Markdown>{article.content}</Markdown>
         </div>
 
         {(article.symptoms || article.prevention) && (

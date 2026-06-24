@@ -3,7 +3,6 @@ import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 
 // OVERRIDE: Set this to your computer's IP address if auto-detection picks the wrong interface
-// Currently: Metro is waiting on 192.168.1.17
 const MANUAL_IP = ''; 
 
 // Auto-detect IP of Metro bundler host to support physical iPhone over local Wi-Fi

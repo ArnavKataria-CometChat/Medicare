@@ -20,7 +20,6 @@ const EditUser = ({ navigate, userId }) => {
   const [experienceYears, setExperienceYears] = useState(0);
   const [bio, setBio] = useState('');
   const [availabilityHours, setAvailabilityHours] = useState('Mon-Fri 9am-5pm');
-  const [imageUrl, setImageUrl] = useState('');
   const [isAvailable, setIsAvailable] = useState(true);
 
   const [loading, setLoading] = useState(false);
@@ -45,7 +44,6 @@ const EditUser = ({ navigate, userId }) => {
               setExperienceYears(data.doctorProfile.experienceYears || 0);
               setBio(data.doctorProfile.bio || '');
               setAvailabilityHours(data.doctorProfile.availabilityHours || '');
-              setImageUrl(data.doctorProfile.imageUrl || '');
               setIsAvailable(data.doctorProfile.isAvailable ?? true);
             }
           } else {
@@ -79,7 +77,6 @@ const EditUser = ({ navigate, userId }) => {
       body.experienceYears = parseInt(experienceYears);
       body.bio = bio;
       body.availabilityHours = availabilityHours;
-      body.imageUrl = imageUrl;
       body.isAvailable = isAvailable;
     }
 
@@ -240,17 +237,6 @@ const EditUser = ({ navigate, userId }) => {
                   className="form-control"
                   value={availabilityHours}
                   onChange={(e) => setAvailabilityHours(e.target.value)}
-                  disabled={loading}
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Profile Photo URL</label>
-                <input
-                  type="url"
-                  className="form-control"
-                  value={imageUrl}
-                  onChange={(e) => setImageUrl(e.target.value)}
                   disabled={loading}
                 />
               </div>

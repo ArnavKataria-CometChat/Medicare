@@ -13,7 +13,6 @@ const Profile = ({ navigate }) => {
   // Doctor Profile state
   const [bio, setBio] = useState('');
   const [availabilityHours, setAvailabilityHours] = useState('');
-  const [imageUrl, setImageUrl] = useState('');
   const [specialization, setSpecialization] = useState('');
   const [experienceYears, setExperienceYears] = useState(0);
 
@@ -39,7 +38,6 @@ const Profile = ({ navigate }) => {
         if (profileData.doctorProfile) {
           setBio(profileData.doctorProfile.bio || '');
           setAvailabilityHours(profileData.doctorProfile.availabilityHours || '');
-          setImageUrl(profileData.doctorProfile.imageUrl || '');
           setSpecialization(profileData.doctorProfile.specialization || '');
           setExperienceYears(profileData.doctorProfile.experienceYears || 0);
         }
@@ -75,7 +73,6 @@ const Profile = ({ navigate }) => {
     if (isDoctor) {
       body.bio = bio;
       body.availabilityHours = availabilityHours;
-      body.imageUrl = imageUrl;
       body.specialization = specialization;
       body.experienceYears = parseInt(experienceYears);
     }
@@ -265,16 +262,6 @@ const Profile = ({ navigate }) => {
                   placeholder="e.g. Mon-Fri 9am-5pm"
                   value={availabilityHours}
                   onChange={(e) => setAvailabilityHours(e.target.value)}
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Profile Image URL</label>
-                <input
-                  type="url"
-                  className="form-control"
-                  value={imageUrl}
-                  onChange={(e) => setImageUrl(e.target.value)}
                 />
               </div>
 
