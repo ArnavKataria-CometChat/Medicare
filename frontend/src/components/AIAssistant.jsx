@@ -1,12 +1,16 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useCometChat } from '../cometchat/CometChatProvider';
+import { CometChat } from '@cometchat/chat-sdk-javascript';
 
 const AIAssistant = ({ navigate }) => {
   const { token } = useAuth();
+  const { isReady } = useCometChat();
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState([
     {
+      id: 'welcome',
       sender: 'bot',
       text: "Hello! I am your MediCare AI Assistant. How can I help you today? You can describe symptoms, ask for specialties, or say 'book with a cardiologist' to start a booking!"
     }
@@ -24,17 +28,97 @@ const AIAssistant = ({ navigate }) => {
     }
   }, [messages, isOpen]);
 
+  // Load message history from CometChat on panel open
+  useEffect(() => {
+    if (!isOpen || !isReady) return;
+
+    const messagesRequest = new CometChat.MessagesRequestBuilder()
+      .setUID('medicare_ai_assistant')
+      .setLimit(50)
+      .build();
+
+    messagesRequest.fetchPrevious()
+      .then((ccMessages) => {
+        const formatted = ccMessages
+          .filter(m => m.category === 'message' && m.type === 'text')
+          .map(m => ({
+            id: m.id || m.getId(),
+            sender: m.getSender().getUid() === 'medicare_ai_assistant' ? 'bot' : 'user',
+            text: m.getText(),
+            action: m.getMetadata()?.suggestedAction,
+            params: m.getMetadata()?.suggestedParams
+          }));
+
+        if (formatted.length === 0) {
+          setMessages([
+            {
+              id: 'welcome',
+              sender: 'bot',
+              text: "Hello! I am your MediCare AI Assistant. How can I help you today? You can describe symptoms, ask for specialties, or say 'book with a cardiologist' to start a booking!"
+            }
+          ]);
+        } else {
+          setMessages(formatted);
+        }
+      })
+      .catch(err => {
+        console.error('[AIAssistant] Error fetching previous messages:', err);
+      });
+
+    // Register message listener for real-time bot responses
+    const listenerId = `ai_assistant_listener_${Date.now()}`;
+    CometChat.addMessageListener(
+      listenerId,
+      new CometChat.MessageListener({
+        onTextMessageReceived: (textMessage) => {
+          if (textMessage.getSender().getUid() === 'medicare_ai_assistant') {
+            setMessages((prev) => {
+              if (prev.some(m => m.id === textMessage.getId())) return prev;
+              return [
+                ...prev,
+                {
+                  id: textMessage.getId(),
+                  sender: 'bot',
+                  text: textMessage.getText(),
+                  action: textMessage.getMetadata()?.suggestedAction,
+                  params: textMessage.getMetadata()?.suggestedParams
+                }
+              ];
+            });
+          }
+        }
+      })
+    );
+
+    return () => {
+      CometChat.removeMessageListener(listenerId);
+    };
+  }, [isOpen, isReady]);
+
   const handleSend = async (e) => {
     e.preventDefault();
-    if (!input.trim() || sending) return;
+    if (!input.trim() || sending || !isReady) return;
 
     const userMessage = input.trim();
     setInput('');
-    setMessages((prev) => [...prev, { sender: 'user', text: userMessage }]);
     setSending(true);
 
     try {
-      const response = await fetch('/api/ai/chat', {
+      // 1. Send user message to CometChat so it is logged in history
+      const textMessage = new CometChat.TextMessage('medicare_ai_assistant', userMessage, CometChat.RECEIVER_TYPE.USER);
+      const sentMessage = await CometChat.sendMessage(textMessage);
+      
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: sentMessage.getId(),
+          sender: 'user',
+          text: userMessage
+        }
+      ]);
+
+      // 2. Call local backend endpoint to trigger AI logic and response transmission
+      await fetch('/api/ai/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -42,29 +126,15 @@ const AIAssistant = ({ navigate }) => {
         },
         body: JSON.stringify({ message: userMessage })
       });
-
-      if (response.ok) {
-        const data = await response.json();
-        setMessages((prev) => [
-          ...prev,
-          {
-            sender: 'bot',
-            text: data.reply,
-            action: data.suggestedAction,
-            params: data.suggestedParams
-          }
-        ]);
-      } else {
-        setMessages((prev) => [
-          ...prev,
-          { sender: 'bot', text: 'Sorry, I encountered an error processing that request.' }
-        ]);
-      }
     } catch (error) {
-      console.error('AI chat error:', error);
+      console.error('[AIAssistant] Error sending message:', error);
       setMessages((prev) => [
         ...prev,
-        { sender: 'bot', text: 'Connection lost. Please check if the server is running.' }
+        {
+          id: 'error_' + Date.now(),
+          sender: 'bot',
+          text: 'Failed to send message. Please check your connection.'
+        }
       ]);
     } finally {
       setSending(false);
@@ -74,7 +144,6 @@ const AIAssistant = ({ navigate }) => {
   const handleActionClick = (action, params) => {
     setIsOpen(false);
     if (action === 'REDIRECT_BOOK') {
-      // Navigate to /book and pass pre-populated info via session/state
       navigate('/book', params);
     } else if (action === 'REDIRECT_DIRECTORY') {
       navigate('/doctors');
@@ -122,13 +191,13 @@ const AIAssistant = ({ navigate }) => {
             <input
               type="text"
               className="form-control"
-              placeholder="Ask anything..."
+              placeholder={isReady ? "Ask anything..." : "Connecting to chat..."}
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              disabled={sending}
+              disabled={sending || !isReady}
               style={{ borderRadius: 'var(--radius-sm)' }}
             />
-            <button type="submit" className="btn btn-primary" disabled={sending} style={{ padding: '0.5rem 1rem' }}>
+            <button type="submit" className="btn btn-primary" disabled={sending || !isReady} style={{ padding: '0.5rem 1rem' }}>
               Send
             </button>
           </form>

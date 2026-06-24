@@ -19,6 +19,13 @@ messaging.onBackgroundMessage((payload) => {
 
   // CometChat sends data-only messages
   const data = payload.data || {};
+
+  // Suppress background notification for AI Assistant replies
+  if (data.sender === 'medicare_ai_assistant' || data.senderName === 'MediCare AI Assistant') {
+    console.log('[firebase-messaging-sw] Suppressing background notification for AI agent reply.');
+    return;
+  }
+
   const notification = payload.notification || {};
 
   const title = notification.title || data.title || data.senderName || 'MediCare';

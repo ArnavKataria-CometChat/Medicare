@@ -2,6 +2,8 @@ import express from 'express';
 import crypto from 'crypto';
 import { WebhookLog, CallLog, AgentMetrics, DoctorSession, NotificationLog, User } from '../models/index.js';
 import { Op } from 'sequelize';
+import { getAIResponse } from '../controllers/aiController.js';
+import { sendCometChatMessage } from '../services/cometchatService.js';
 
 const router = express.Router();
 
@@ -42,10 +44,26 @@ function validateSignature(req, res, next) {
 async function handleMessageSent(payload) {
   const data = payload.data || {};
   const senderUid = data.sender?.uid;
+  const receiverUid = data.receiver?.uid;
 
-  // W5: Write to NOTIFICATION_LOG for push delivery tracking
-  if (data.receiver?.uid) {
-    const receiverUser = await User.findOne({ where: { cometChatUid: data.receiver.uid } });
+  // Handle messages sent to the AI assistant bot
+  if (senderUid !== 'medicare_ai_assistant' && receiverUid === 'medicare_ai_assistant') {
+    const userMessage = data.text || '';
+    try {
+      const aiResponse = await getAIResponse(userMessage);
+      const { reply, suggestedAction, suggestedParams } = aiResponse;
+      const metadata = suggestedAction ? { suggestedAction, suggestedParams } : null;
+      
+      await sendCometChatMessage('medicare_ai_assistant', senderUid, reply, metadata);
+    } catch (err) {
+      console.error('[Webhook] Error handling AI message:', err);
+      await sendCometChatMessage('medicare_ai_assistant', senderUid, 'Sorry, I encountered an error processing your query.');
+    }
+  }
+
+  // W5: Write to NOTIFICATION_LOG for push delivery tracking (exclude AI assistant replies)
+  if (receiverUid && senderUid !== 'medicare_ai_assistant') {
+    const receiverUser = await User.findOne({ where: { cometChatUid: receiverUid } });
     if (receiverUser) {
       await NotificationLog.create({
         userId: receiverUser.id,

@@ -6,7 +6,8 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  SafeAreaView
+  SafeAreaView,
+  Image
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../services/api';
@@ -69,9 +70,13 @@ const DoctorDetailsScreen = ({ route, navigation }) => {
       <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
         {/* Profile Card */}
         <View style={styles.profileCard}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{getInitials(doctor.user?.name)}</Text>
-          </View>
+          {doctor.imageUrl ? (
+            <Image source={{ uri: doctor.imageUrl }} style={styles.avatarImage} />
+          ) : (
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>{getInitials(doctor.user?.name)}</Text>
+            </View>
+          )}
           <Text style={styles.docName}>{doctor.user?.name || 'Doctor'}</Text>
           <View style={styles.specialtyBadge}>
             <Text style={styles.specialtyText}>{doctor.specialization}</Text>
@@ -204,6 +209,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#0d9488',
     justifyContent: 'center',
     alignItems: 'center',
+    marginBottom: 16,
+  },
+  avatarImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     marginBottom: 16,
   },
   avatarText: {

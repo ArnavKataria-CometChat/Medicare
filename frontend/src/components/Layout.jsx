@@ -6,10 +6,12 @@ import NotificationBell from './NotificationBell';
 const Layout = ({ children, currentPath, navigate }) => {
   const { isAuthenticated, user, logout } = useAuth();
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const handleNavClick = (e, path) => {
     e.preventDefault();
     setDropdownOpen(false);
+    setMobileMenuOpen(false);
     navigate(path);
   };
 
@@ -73,7 +75,8 @@ const Layout = ({ children, currentPath, navigate }) => {
           </svg>
           Medi<span>Care</span>
         </a>
-        <nav className="nav-links">
+
+        <nav className={`nav-links ${mobileMenuOpen ? 'mobile-open' : ''}`}>
           {navLinks.map((link) => (
             <a
               key={link.path}
@@ -84,7 +87,9 @@ const Layout = ({ children, currentPath, navigate }) => {
               {link.label}
             </a>
           ))}
+        </nav>
 
+        <div className="nav-actions">
           {/* Notification Bell */}
           {isAuthenticated && user && <NotificationBell navigate={navigate} />}
 
@@ -171,7 +176,30 @@ const Layout = ({ children, currentPath, navigate }) => {
               )}
             </div>
           )}
-        </nav>
+
+          {/* Mobile menu toggle button */}
+          <button
+            className="mobile-nav-toggle"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            aria-label="Toggle navigation menu"
+          >
+            <svg
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className={`toggle-icon ${mobileMenuOpen ? 'open' : ''}`}
+            >
+              <line x1="4" y1="12" x2="20" y2="12" className="line-middle"></line>
+              <line x1="4" y1="6" x2="20" y2="6" className="line-top"></line>
+              <line x1="4" y1="18" x2="20" y2="18" className="line-bottom"></line>
+            </svg>
+          </button>
+        </div>
       </header>
 
       <main className="main-content">{children}</main>

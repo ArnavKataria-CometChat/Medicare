@@ -215,11 +215,16 @@ export function CometChatProvider({ token, user, children }) {
         setCometChatUid(uid);
         setIsReady(true);
 
-        // Register FCM web push token with CometChat (non-blocking)
         registerFcmWebPush((payload) => {
           // Foreground push callback — show in-app toast
           const notification = payload.notification || {};
           const data = payload.data || {};
+
+          // Suppress notifications for AI Assistant replies
+          if (data.sender === 'medicare_ai_assistant' || data.senderName === 'MediCare AI Assistant') {
+            return;
+          }
+
           const title = notification.title || data.title || '';
           const body = notification.body || data.alert || 'New message';
           if (addToast && title) {

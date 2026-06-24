@@ -1,140 +1,136 @@
 import { DoctorProfile, User } from '../models/index.js';
+import { deriveCometChatUid, sendCometChatMessage } from '../services/cometchatService.js';
 
-// Local symptom & specialty rules database
-const SYMPTOM_RULES = [
-  {
-    keywords: ['chest', 'heart', 'tightness', 'palpitation', 'cardio', 'breath'],
-    specialty: 'Cardiology',
-    advice: 'Your symptoms might be related to cardiovascular health. It is highly recommended to consult a cardiologist.'
-  },
-  {
-    keywords: ['headache', 'migraine', 'dizzy', 'numb', 'paralysis', 'seizure', 'brain'],
-    specialty: 'Neurology',
-    advice: 'Frequent migraines or neurological discomfort should be evaluated by a neurologist.'
-  },
-  {
-    keywords: ['skin', 'rash', 'itch', 'acne', 'spot', 'mole', 'dermatology'],
-    specialty: 'Dermatology',
-    advice: 'Skin eruptions, lesions, or chronic itching are best addressed by a dermatologist.'
-  },
-  {
-    keywords: ['bone', 'joint', 'fracture', 'knee', 'back pain', 'muscle', 'sprain', 'ortho'],
-    specialty: 'Orthopedics',
-    advice: 'Joint pain or bone discomfort typically falls under orthopedic specialization.'
-  },
-  {
-    keywords: ['child', 'pediatric', 'baby', 'kid', 'growth', 'vaccination'],
-    specialty: 'Pediatrics',
-    advice: 'For infant or child healthcare, our pediatricians provide specialized care.'
-  },
-  {
-    keywords: ['stomach', 'bloat', 'diarrhea', 'acid', 'heartburn', 'digestive', 'gut'],
-    specialty: 'Gastroenterology',
-    advice: 'Gastrointestinal issues are treated by our gastroenterology department.'
-  },
-  {
-    keywords: ['diabetes', 'sugar', 'thyroid', 'hormone', 'insulin'],
-    specialty: 'Endocrinology',
-    advice: 'Hormonal conditions and blood sugar management are handled by endocrinologists.'
+export const getAIResponse = async (message) => {
+  if (!message || message.trim() === '') {
+    throw new Error('Message content is required.');
   }
-];
+
+  // Fetch all active doctors to match names or specialties dynamically
+  const doctors = await DoctorProfile.findAll({
+    include: [{ model: User, as: 'user', where: { status: 'active' }, attributes: ['name'] }]
+  });
+
+  const groqKey = process.env.GROQ_API_KEY;
+  if (!groqKey) {
+    throw new Error('Groq API key is not configured.');
+  }
+
+  const doctorsListFormatted = doctors.map(doc => ({
+    id: doc.id,
+    name: doc.user.name,
+    specialization: doc.specialization
+  }));
+
+  const systemInstruction = `You are the MediCare AI Assistant, an automated health assistant.
+Your goal is to guide users to relevant medical specialists based on their symptoms or queries, and assist them in booking appointments.
+Here is the current list of active doctors at MediCare:
+${JSON.stringify(doctorsListFormatted, null, 2)}
+
+Rules:
+1. If the user describes symptoms that match a specialty (e.g. tight chest for Cardiology, headaches for Neurology, rash for Dermatology, joint pain for Orthopedics, pediatric/child query for Pediatrics, stomach/digestive query for Gastroenterology, sugar/thyroid for Endocrinology), recommend consulting with an appropriate doctor from the active doctors list.
+2. If there are doctors for that specialty, set:
+   - suggestedAction to "REDIRECT_BOOK"
+   - suggestedParams to the matching doctor's ID, name, and specialization from the list.
+3. If no doctor exists for the matching specialty in the list, state that no doctors are currently listed for that department, and do not redirect.
+4. If the user expresses general interest in booking/scheduling an appointment but without a specific doctor or specialty, set:
+   - suggestedAction to "REDIRECT_DIRECTORY"
+   - suggestedParams to null
+5. Always include a disclaimer at the end of your reply (but within the "reply" string) stating: "Disclaimer: I am an automated health assistant, not a doctor. If you are experiencing a severe medical emergency, please contact 911 or visit your nearest emergency room immediately."
+6. You MUST respond with ONLY a raw JSON object matching this schema (do not wrap in markdown code blocks like \`\`\`json):
+{
+  "reply": "string (your helpful response text containing the disclaimer)",
+  "suggestedAction": "REDIRECT_BOOK" | "REDIRECT_DIRECTORY" | null,
+  "suggestedParams": {
+    "doctorProfileId": "string",
+    "specialization": "string",
+    "doctorName": "string"
+  } | null
+}`;
+
+  let retries = 3;
+  let delay = 1000;
+  let response;
+
+  while (retries > 0) {
+    response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${groqKey}`
+      },
+      body: JSON.stringify({
+        model: 'llama-3.3-70b-versatile',
+        messages: [
+          {
+            role: 'system',
+            content: systemInstruction
+          },
+          {
+            role: 'user',
+            content: message
+          }
+        ],
+        response_format: {
+          type: 'json_object'
+        }
+      })
+    });
+
+    if (response.status === 503 || response.status === 429) {
+      console.warn(`[Groq API] Got status ${response.status}. Retrying in ${delay}ms... (attempts left: ${retries - 1})`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      retries--;
+      delay *= 2;
+    } else {
+      break;
+    }
+  }
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Groq API Error: ${errorText}`);
+  }
+
+  const data = await response.json();
+  const text = data.choices?.[0]?.message?.content;
+  if (!text) {
+    throw new Error('Empty response from Groq API.');
+  }
+
+  let rawText = text.trim();
+  if (rawText.startsWith('```')) {
+    rawText = rawText.replace(/^```json\s*/, '').replace(/```$/, '').trim();
+  }
+  const parsed = JSON.parse(rawText);
+  if (!parsed || typeof parsed.reply !== 'string') {
+    throw new Error('Invalid JSON structure returned by Groq API.');
+  }
+
+  return {
+    reply: parsed.reply,
+    suggestedAction: parsed.suggestedAction || null,
+    suggestedParams: parsed.suggestedParams || null
+  };
+};
 
 export const processAIChat = async (req, res, next) => {
   try {
     const { message } = req.body;
+    const response = await getAIResponse(message);
+    const { reply, suggestedAction, suggestedParams } = response;
 
-    if (!message || message.trim() === '') {
-      return res.status(400).json({ error: 'Message content is required.' });
+    if (req.user && req.user.id) {
+      const receiverUid = deriveCometChatUid(req.user.id);
+      const metadata = suggestedAction ? { suggestedAction, suggestedParams } : null;
+      await sendCometChatMessage('medicare_ai_assistant', receiverUid, reply, metadata);
     }
 
-    const query = message.toLowerCase();
-
-    // 1. Try to fetch all active doctors to match names or specialties
-    const doctors = await DoctorProfile.findAll({
-      include: [{ model: User, as: 'user', where: { status: 'active' }, attributes: ['name'] }]
-    });
-
-    // 2. Check for direct doctor name match (e.g. "Dr. Sarah Jenkins")
-    let matchedDoctor = null;
-    for (const doc of doctors) {
-      const docName = doc.user.name.toLowerCase();
-      const lastName = docName.split(' ').pop(); // e.g. "jenkins"
-      if (query.includes(docName) || query.includes(lastName)) {
-        matchedDoctor = doc;
-        break;
-      }
-    }
-
-    if (matchedDoctor) {
-      return res.status(200).json({
-        reply: `I found ${matchedDoctor.user.name} who specializes in ${matchedDoctor.specialization}. Would you like to schedule an appointment?`,
-        suggestedAction: 'REDIRECT_BOOK',
-        suggestedParams: {
-          doctorProfileId: matchedDoctor.id,
-          specialization: matchedDoctor.specialization,
-          doctorName: matchedDoctor.user.name
-        }
-      });
-    }
-
-    // 3. Check for specialty keyword match (e.g. "book with a cardiologist")
-    let matchedSpecialty = null;
-    for (const rule of SYMPTOM_RULES) {
-      if (query.includes(rule.specialty.toLowerCase())) {
-        matchedSpecialty = rule.specialty;
-        break;
-      }
-    }
-
-    if (!matchedSpecialty) {
-      // 4. Try matching symptoms from the rules table
-      for (const rule of SYMPTOM_RULES) {
-        const hasKeyword = rule.keywords.some(kw => query.includes(kw));
-        if (hasKeyword) {
-          matchedSpecialty = rule.specialty;
-          break;
-        }
-      }
-    }
-
-    // If we matched a specialty, find the first available doctor in that specialty
-    if (matchedSpecialty) {
-      const specialtyDocs = doctors.filter(doc => doc.specialization.toLowerCase() === matchedSpecialty.toLowerCase());
-      
-      let replyMessage = `Based on your description, I recommend scheduling a consultation with a specialist in ${matchedSpecialty}.`;
-      
-      if (specialtyDocs.length > 0) {
-        const firstDoc = specialtyDocs[0];
-        replyMessage += ` You can consult with ${firstDoc.user.name}. Would you like me to open the booking page?`;
-        
-        return res.status(200).json({
-          reply: replyMessage,
-          suggestedAction: 'REDIRECT_BOOK',
-          suggestedParams: {
-            doctorProfileId: firstDoc.id,
-            specialization: matchedSpecialty,
-            doctorName: firstDoc.user.name
-          }
-        });
-      } else {
-        replyMessage += ` Currently, there are no doctors listed under this specialty. Please browse other departments.`;
-        return res.status(200).json({ reply: replyMessage });
-      }
-    }
-
-    // 5. Check if booking intent in general is mentioned
-    if (query.includes('book') || query.includes('appointment') || query.includes('schedule') || query.includes('consult')) {
-      return res.status(200).json({
-        reply: 'Sure! I can help you book an appointment. Please click below to open the directory and choose a specialist, or tell me which doctor or specialization you are looking for.',
-        suggestedAction: 'REDIRECT_DIRECTORY'
-      });
-    }
-
-    // 6. Default response with medical disclaimer
-    res.status(200).json({
-      reply: "Hello! I am your MediCare AI Assistant. I can help guide you to relevant doctors based on your symptoms or assist in booking appointments. Please describe what you are feeling (e.g., chest tightness, skin rash, headaches) or ask to book with a specific doctor.\n\n*Disclaimer: I am an automated health assistant, not a doctor. If you are experiencing a severe medical emergency, please contact 911 or visit your nearest emergency room immediately.*"
-    });
+    res.status(200).json(response);
   } catch (error) {
+    if (error.message === 'Message content is required.') {
+      return res.status(400).json({ error: error.message });
+    }
     next(error);
   }
 };

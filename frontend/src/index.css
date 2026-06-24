@@ -260,6 +260,105 @@ input, select, textarea {
   gap: 1.75rem;
 }
 
+.nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.mobile-nav-toggle {
+  display: none;
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  padding: 0.5rem;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  transition: color var(--transition-fast);
+}
+
+.mobile-nav-toggle:hover {
+  color: var(--primary);
+}
+
+.toggle-icon line {
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
+  transform-origin: center;
+}
+
+.toggle-icon.open .line-middle {
+  opacity: 0;
+}
+
+.toggle-icon.open .line-top {
+  transform: translateY(6px) rotate(45deg);
+}
+
+.toggle-icon.open .line-bottom {
+  transform: translateY(-6px) rotate(-45deg);
+}
+
+/* Responsive Navbar Media Query */
+@media (max-width: 768px) {
+  .navbar {
+    padding: 0.75rem 1.5rem;
+  }
+
+  .mobile-nav-toggle {
+    display: flex;
+  }
+
+  .nav-links {
+    display: none; /* hidden on mobile by default */
+    flex-direction: column;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    width: 100%;
+    background: rgba(255, 255, 255, 0.98);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--border-glass);
+    padding: 1.5rem;
+    gap: 1.25rem;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05);
+    z-index: 99;
+  }
+
+  .nav-links.mobile-open {
+    display: flex;
+    animation: slideDown 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  }
+
+  .nav-link {
+    width: 100%;
+    text-align: center;
+    padding: 0.75rem 0;
+    font-size: 0.9rem;
+  }
+
+  .nav-link::after {
+    display: none; /* Hide standard underline on mobile */
+  }
+
+  .nav-link:hover, .nav-link.active {
+    background: var(--primary-glow) !important;
+    border-radius: var(--radius-sm);
+  }
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .nav-link {
   color: var(--text-secondary);
   font-weight: 600;
@@ -568,6 +667,7 @@ input, select, textarea {
   gap: 0.5rem;
   font-size: 1.05rem;
   font-weight: 600;
+  color: white;
 }
 
 .ai-panel-title span {

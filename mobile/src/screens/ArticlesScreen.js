@@ -60,57 +60,105 @@ const ArticlesScreen = () => {
     return colors[category?.toLowerCase()] || { bg: '#f1f5f9', text: '#475569' };
   };
 
+  // Parses inline markdown bold (**text**) within a string and returns an array of Text elements
+  const renderInlineText = (text, baseStyle) => {
+    const parts = [];
+    const regex = /\*\*(.+?)\*\*/g;
+    let lastIndex = 0;
+    let match;
+
+    while ((match = regex.exec(text)) !== null) {
+      // Add text before the bold segment
+      if (match.index > lastIndex) {
+        parts.push(
+          <Text key={`t-${lastIndex}`} style={baseStyle}>
+            {text.substring(lastIndex, match.index)}
+          </Text>
+        );
+      }
+      // Add the bold segment
+      parts.push(
+        <Text key={`b-${match.index}`} style={[baseStyle, { fontWeight: '700' }]}>
+          {match[1]}
+        </Text>
+      );
+      lastIndex = regex.lastIndex;
+    }
+
+    // Add remaining text after last bold segment
+    if (lastIndex < text.length) {
+      parts.push(
+        <Text key={`t-${lastIndex}`} style={baseStyle}>
+          {text.substring(lastIndex)}
+        </Text>
+      );
+    }
+
+    return parts.length > 0 ? parts : <Text style={baseStyle}>{text}</Text>;
+  };
+
   const renderArticleContent = (content) => {
     if (!content) return null;
     return content.split('\n').map((line, idx) => {
       const trimmed = line.trim();
-      if (trimmed.startsWith('###')) {
-        return (
-          <Text key={idx} style={styles.mdH3}>
-            {trimmed.replace('###', '').trim()}
-          </Text>
-        );
-      }
+
+      // Check #### before ### (more specific first)
       if (trimmed.startsWith('####')) {
         return (
           <Text key={idx} style={styles.mdH4}>
-            {trimmed.replace('####', '').trim()}
+            {trimmed.replace(/^####\s*/, '').trim()}
           </Text>
         );
       }
-      if (trimmed.startsWith('**') && trimmed.endsWith('**')) {
+      if (trimmed.startsWith('###')) {
+        return (
+          <Text key={idx} style={styles.mdH3}>
+            {trimmed.replace(/^###\s*/, '').trim()}
+          </Text>
+        );
+      }
+      // Standalone bold line
+      if (trimmed.startsWith('**') && trimmed.endsWith('**') && !trimmed.slice(2, -2).includes('**')) {
         return (
           <Text key={idx} style={styles.mdBold}>
             {trimmed.replace(/\*\*/g, '').trim()}
           </Text>
         );
       }
-      if (trimmed.startsWith('-') || trimmed.startsWith('*')) {
-        // Bullet points
-        const text = trimmed.substring(1).trim();
-        // Parse bold text inline if any
+      // Bullet points (- or * followed by space)
+      if (trimmed.match(/^[-*]\s/)) {
+        const text = trimmed.substring(2).trim();
         return (
           <View key={idx} style={styles.bulletRow}>
             <Text style={styles.bulletDot}>•</Text>
-            <Text style={styles.bulletText}>{text}</Text>
+            <Text style={styles.bulletText}>
+              {renderInlineText(text, styles.bulletText)}
+            </Text>
           </View>
         );
       }
-      if (trimmed.match(/^\d+\./)) {
-        // Numbered list items
+      // Numbered list items
+      if (trimmed.match(/^\d+\.\s/)) {
+        const numMatch = trimmed.match(/^(\d+)\.\s(.*)/);
+        const num = numMatch ? numMatch[1] : '';
+        const text = numMatch ? numMatch[2] : trimmed.substring(trimmed.indexOf('.') + 1).trim();
         return (
           <View key={idx} style={styles.bulletRow}>
-            <Text style={styles.bulletNum}>{trimmed.split('.')[0]}.</Text>
-            <Text style={styles.bulletText}>{trimmed.substring(trimmed.indexOf('.') + 1).trim()}</Text>
+            <Text style={styles.bulletNum}>{num}.</Text>
+            <Text style={styles.bulletText}>
+              {renderInlineText(text, styles.bulletText)}
+            </Text>
           </View>
         );
       }
+      // Empty lines
       if (!trimmed) {
         return <View key={idx} style={{ height: 12 }} />;
       }
+      // Regular paragraph with possible inline bold
       return (
         <Text key={idx} style={styles.mdParagraph}>
-          {trimmed}
+          {renderInlineText(trimmed, styles.mdParagraph)}
         </Text>
       );
     });
@@ -138,7 +186,7 @@ const ArticlesScreen = () => {
         </Text>
         
         <Text style={styles.cardExcerpt} numberOfLines={2}>
-          {item.content ? item.content.replace(/[#*]/g, '').trim() : ''}
+          {item.content ? item.content.replace(/#{1,4}\s?/g, '').replace(/\*\*/g, '').replace(/\s+/g, ' ').trim() : ''}
         </Text>
 
         <View style={styles.cardFooter}>

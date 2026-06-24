@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useCometChat } from '../cometchat/CometChatProvider';
 import {
@@ -28,6 +28,22 @@ const Chats = ({ navigate }) => {
   const [groupName, setGroupName] = useState('');
   const [selectedMembers, setSelectedMembers] = useState([]);
   const [showGroupMenu, setShowGroupMenu] = useState(false);
+  const groupMenuRef = useRef(null);
+
+  // Close group menu dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (groupMenuRef.current && !groupMenuRef.current.contains(e.target)) {
+        setShowGroupMenu(false);
+      }
+    };
+    if (showGroupMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showGroupMenu]);
+
+
 
   const toggleMemberSelection = (uid) => {
     setSelectedMembers(prev =>
@@ -152,15 +168,18 @@ const Chats = ({ navigate }) => {
 
   // Handle conversation selection from CometChat's built-in list
   const handleConversationClick = (conversation) => {
-    setSelectedConversation(conversation);
     const conversationWith = conversation.getConversationWith();
     if (conversation.getConversationType() === 'user') {
+      if (conversationWith.getUid() === 'medicare_ai_assistant') {
+        return;
+      }
       setSelectedUser(conversationWith);
       setSelectedGroup(null);
     } else if (conversation.getConversationType() === 'group') {
       setSelectedGroup(conversationWith);
       setSelectedUser(null);
     }
+    setSelectedConversation(conversation);
   };
 
   // Handle clicking a contact from our custom contacts panel
@@ -186,6 +205,63 @@ const Chats = ({ navigate }) => {
     }
   };
 
+  // Hide AI Assistant chat from the conversation list
+  useEffect(() => {
+    const hideAIElement = () => {
+      const allElements = document.querySelectorAll('*');
+      allElements.forEach(el => {
+        if (el.textContent?.trim() === 'MediCare AI Assistant') {
+          let item = el;
+          let found = false;
+          while (item && item !== document.body) {
+            const className = typeof item.className === 'string' ? item.className : '';
+            const tagName = item.tagName.toLowerCase();
+            if (
+              className.split(' ').some(c => 
+                c === 'cometchat-list-item' || 
+                c === 'cc-list-item' || 
+                c.includes('conversation-list-item') ||
+                c.includes('conversations__item')
+              ) ||
+              tagName === 'li'
+            ) {
+              found = true;
+              break;
+            }
+            item = item.parentElement;
+          }
+          
+          // Fallback: if we didn't find the exact list-item class, go up 3 levels to match the wrapper
+          if (!found) {
+            item = el;
+            for (let i = 0; i < 3; i++) {
+              if (item && item.parentElement && item.parentElement !== document.body) {
+                item = item.parentElement;
+              }
+            }
+          }
+
+          if (item && item !== document.body) {
+            if (item.style.display !== 'none') {
+              item.style.setProperty('display', 'none', 'important');
+            }
+          }
+        }
+      });
+    };
+
+    hideAIElement();
+    
+    const interval = setInterval(hideAIElement, 300);
+    const observer = new MutationObserver(hideAIElement);
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    return () => {
+      clearInterval(interval);
+      observer.disconnect();
+    };
+  }, []);
+
   // Staff users see nothing
   if (user?.role === 'STAFF') {
     return (
@@ -205,6 +281,8 @@ const Chats = ({ navigate }) => {
       </div>
     );
   }
+
+
 
   const isDoctorUser = user?.role === 'DOCTOR';
 
@@ -309,19 +387,67 @@ const Chats = ({ navigate }) => {
             </p>
           </div>
         ) : (() => {
+          if (selectedUser && selectedUser.getUid() === 'medicare_ai_assistant') {
+            return (
+              <div style={styles.emptyContainer}>
+                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ opacity: 0.4 }}>
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                </svg>
+                <h3 style={styles.emptyTitle}>Select a conversation</h3>
+                <p style={styles.emptyText}>
+                  Choose a contact from the sidebar to start messaging. Messages are delivered in real-time with typing indicators and read receipts.
+                </p>
+              </div>
+            );
+          }
           if (selectedGroup) {
             return (
               <div style={styles.chatArea}>
                 <div style={styles.messageHeader}>
                   <CometChatMessageHeader
                     group={selectedGroup}
-                    {...(!isDoctorUser && { hideVideoCallButton: true, hideVoiceCallButton: true })}
+                    hideVideoCallButton={true}
+                    hideVoiceCallButton={true}
                   />
-                  {isDoctorUser && selectedGroup && selectedGroup.getOwner() === cometChatUid && (
+                  {isDoctorUser && selectedGroup && (
                     <div style={styles.groupActions}>
-                      <button style={styles.actionBtn} onClick={() => setShowAddMemberModal(true)}>+ Add</button>
-                      <button style={styles.actionBtn} onClick={fetchGroupMembers}>Manage</button>
-                      <button style={styles.dangerBtn} onClick={handleDeleteGroup}>Delete</button>
+                      <CometChatCallButtons group={selectedGroup} />
+                      {selectedGroup.getOwner() === cometChatUid && (
+                        <div ref={groupMenuRef} style={styles.dropdownContainer}>
+                          <button style={styles.actionBtn} onClick={() => setShowGroupMenu(!showGroupMenu)}>
+                            Options ▾
+                          </button>
+                          {showGroupMenu && (
+                            <div style={styles.dropdownMenu}>
+                              <button
+                                style={styles.dropdownItem}
+                                onMouseEnter={(e) => e.currentTarget.style.background = '#f1f5f9'}
+                                onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
+                                onClick={() => { setShowGroupMenu(false); setShowAddMemberModal(true); }}
+                              >
+                                Add Member
+                              </button>
+                              <button
+                                style={styles.dropdownItem}
+                                onMouseEnter={(e) => e.currentTarget.style.background = '#f1f5f9'}
+                                onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
+                                onClick={() => { setShowGroupMenu(false); fetchGroupMembers(); }}
+                              >
+                                Manage Members
+                              </button>
+                              <div style={styles.dropdownDivider}></div>
+                              <button
+                                style={styles.dropdownDeleteItem}
+                                onMouseEnter={(e) => e.currentTarget.style.background = '#fecaca'}
+                                onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
+                                onClick={() => { setShowGroupMenu(false); handleDeleteGroup(); }}
+                              >
+                                Delete Group
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
                   {/* Mobile back button */}
@@ -734,6 +860,54 @@ const styles = {
     display: 'flex',
     gap: '8px',
     zIndex: 10,
+    alignItems: 'center',
+  },
+  dropdownContainer: {
+    position: 'relative',
+    display: 'inline-block',
+  },
+  dropdownMenu: {
+    position: 'absolute',
+    right: 0,
+    top: '35px',
+    background: 'white',
+    border: '1px solid #cbd5e1',
+    borderRadius: '8px',
+    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+    zIndex: 100,
+    minWidth: '150px',
+    display: 'flex',
+    flexDirection: 'column',
+    padding: '4px 0',
+  },
+  dropdownItem: {
+    padding: '8px 12px',
+    background: 'none',
+    border: 'none',
+    width: '100%',
+    textAlign: 'left',
+    fontSize: '0.8rem',
+    color: '#334155',
+    fontWeight: '600',
+    cursor: 'pointer',
+    transition: 'background 0.15s',
+  },
+  dropdownDeleteItem: {
+    padding: '8px 12px',
+    background: 'none',
+    border: 'none',
+    width: '100%',
+    textAlign: 'left',
+    fontSize: '0.8rem',
+    color: '#991b1b',
+    fontWeight: '600',
+    cursor: 'pointer',
+    transition: 'background 0.15s',
+  },
+  dropdownDivider: {
+    height: '1px',
+    background: '#e2e8f0',
+    margin: '4px 0',
   },
   actionBtn: {
     padding: '6px 12px',

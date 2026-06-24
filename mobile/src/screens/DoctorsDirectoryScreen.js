@@ -7,7 +7,8 @@ import {
   TextInput,
   TouchableOpacity,
   ActivityIndicator,
-  SafeAreaView
+  SafeAreaView,
+  Image
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../services/api';
@@ -97,9 +98,13 @@ const DoctorsDirectoryScreen = ({ navigation }) => {
         activeOpacity={0.8}
       >
         <View style={styles.cardHeader}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{getInitials(item.user?.name)}</Text>
-          </View>
+          {item.imageUrl ? (
+            <Image source={{ uri: item.imageUrl }} style={styles.avatarImage} />
+          ) : (
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>{getInitials(item.user?.name)}</Text>
+            </View>
+          )}
           <View style={styles.headerInfo}>
             <Text style={styles.docName}>{item.user?.name || 'Doctor'}</Text>
             <View style={styles.specialtyBadge}>
@@ -303,6 +308,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#0d9488',
     justifyContent: 'center',
     alignItems: 'center',
+    marginRight: 12,
+  },
+  avatarImage: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     marginRight: 12,
   },
   avatarText: {

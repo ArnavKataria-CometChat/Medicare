@@ -62,6 +62,10 @@ export default function CometChatNotifier({ isReady, addToast }) {
       if (currentPathRef.current === '/chats') return;
 
       const sender = message.getSender();
+      if (sender && sender.getUid() === 'medicare_ai_assistant') {
+        return; // Suppress notification for AI Assistant replies
+      }
+
       const senderName = sender?.getName() || 'Someone';
       let body;
       if (isMedia) {

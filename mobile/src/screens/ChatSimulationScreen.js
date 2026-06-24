@@ -189,25 +189,7 @@ const ChatSimulationScreen = ({ route, navigation }) => {
             </Text>
           </View>
         ),
-        headerRight: () => {
-          const isGroupAdmin = group && isDoctorUser && ccGroup && ccGroup.getOwner() === cometChatUid;
-          if (isGroupAdmin) {
-            return (
-              <View style={{ flexDirection: 'row', gap: 16, marginRight: 10 }}>
-                <TouchableOpacity onPress={() => setShowAddMemberModal(true)}>
-                  <Ionicons name="person-add-outline" size={20} color="#0d9488" />
-                </TouchableOpacity>
-                <TouchableOpacity onPress={fetchGroupMembers}>
-                  <Ionicons name="settings-outline" size={20} color="#0d9488" />
-                </TouchableOpacity>
-                <TouchableOpacity onPress={handleDeleteGroup}>
-                  <Ionicons name="trash-outline" size={20} color="#ef4444" />
-                </TouchableOpacity>
-              </View>
-            );
-          }
-          return null;
-        }
+        headerRight: () => null,
       });
     }
   }, [contact, group, navigation, isDoctorUser, ccGroup, cometChatUid]);
@@ -295,22 +277,35 @@ const ChatSimulationScreen = ({ route, navigation }) => {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
       >
-        {/* Message Header — shows name, presence status */}
+        {/* Message Header — shows name, presence status, call buttons & group menu */}
         <View style={styles.messageHeader}>
           {ccUser ? (
             <CometChatMessageHeader
               user={ccUser}
-              hideVideoCallButton={!isDoctorUser}
-              hideVoiceCallButton={!isDoctorUser}
+              hideVideoCallButton={true}
+              hideVoiceCallButton={true}
+              AuxiliaryButtonView={isDoctorUser ? () => (
+                <View style={styles.headerCallButtons}>
+                  <CometChatCallButtons user={ccUser} />
+                </View>
+              ) : undefined}
             />
           ) : (
-            <>
-              <CometChatMessageHeader
-                group={ccGroup}
-                hideVideoCallButton={!isDoctorUser}
-                hideVoiceCallButton={!isDoctorUser}
-              />
-            </>
+            <CometChatMessageHeader
+              group={ccGroup}
+              hideVideoCallButton={true}
+              hideVoiceCallButton={true}
+              AuxiliaryButtonView={isDoctorUser ? () => (
+                <View style={styles.headerCallButtons}>
+                  <CometChatCallButtons group={ccGroup} />
+                </View>
+              ) : undefined}
+              options={group && isDoctorUser && ccGroup && ccGroup.getOwner() === cometChatUid ? () => [
+                { id: 'add-member', text: 'Add Member', onPress: () => setShowAddMemberModal(true) },
+                { id: 'manage-members', text: 'Manage Members', onPress: fetchGroupMembers },
+                { id: 'delete-group', text: 'Delete Group', onPress: handleDeleteGroup },
+              ] : undefined}
+            />
           )}
         </View>
 
@@ -430,6 +425,11 @@ const styles = StyleSheet.create({
   messageHeader: {
     borderBottomWidth: 1,
     borderBottomColor: '#e2e8f0',
+    overflow: 'visible',
+  },
+  headerCallButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   groupCallButtons: {
     flexDirection: 'row',

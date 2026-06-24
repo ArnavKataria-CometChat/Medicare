@@ -269,12 +269,20 @@ export async function initializeCometChatRoles() {
   await ensureRoleExists('staff', 'Medicare staff — presence only, no messaging');
   await ensureRoleExists('admin', 'Medicare admin — full access for moderation');
   console.log('[CometChat] Roles initialized.');
+
+  console.log('[CometChat] Registering AI Assistant user...');
+  await createCometChatUser(
+    'medicare_ai_assistant',
+    'MediCare AI Assistant',
+    'admin',
+    ['role:bot', 'verified']
+  );
 }
 
 /**
  * Sends a message on behalf of a user using CometChat REST API.
  */
-export async function sendCometChatMessage(senderUid, receiverUid, text) {
+export async function sendCometChatMessage(senderUid, receiverUid, text, metadata = null) {
   if (!APP_ID || !REST_API_KEY) {
     console.warn('[CometChat] Service not configured. Skipping message send.');
     return null;
@@ -286,13 +294,17 @@ export async function sendCometChatMessage(senderUid, receiverUid, text) {
     category: 'message',
     type: 'text',
     data: {
-      text: text
+      text: text,
+      ...(metadata && { metadata })
     },
     sender: senderUid
   };
 
   const response = await cometchatFetch('/messages', {
     method: 'POST',
+    headers: {
+      onBehalfOf: senderUid
+    },
     body: JSON.stringify(body),
   });
 

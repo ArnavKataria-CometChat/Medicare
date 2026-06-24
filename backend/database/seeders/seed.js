@@ -76,6 +76,47 @@ const seedDatabase = async () => {
     const createdDoctorUsers = await User.bulkCreate(doctorUsers, { individualHooks: true });
     const doctorProfiles = [];
 
+    // Gender-appropriate doctor profile images
+    // Maps doctor name to gender for image assignment
+    const getDoctorImageUrl = (name, index) => {
+      // Female doctor images - professional medical portraits
+      const femaleImages = [
+        'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=300', // Female doctor with stethoscope
+        'https://images.unsplash.com/photo-1594824476967-48c8b964273f?auto=format&fit=crop&q=80&w=300', // Female doctor smiling
+        'https://images.unsplash.com/photo-1651008376811-b90baee60c1f?auto=format&fit=crop&q=80&w=300', // Female doctor portrait
+        'https://images.unsplash.com/photo-1614608682850-e0d6ed316d47?auto=format&fit=crop&q=80&w=300', // Female medical professional
+        'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=300', // Professional woman
+        'https://images.unsplash.com/photo-1607990281513-2c110a25bd8c?auto=format&fit=crop&q=80&w=300', // Female doctor in lab coat
+        'https://images.unsplash.com/photo-1643297654416-05795d62e39c?auto=format&fit=crop&q=80&w=300', // Female healthcare worker
+        'https://images.unsplash.com/photo-1527613426441-4da17471b66d?auto=format&fit=crop&q=80&w=300', // Female nurse/doctor
+      ];
+      // Male doctor images - professional medical portraits  
+      const maleImages = [
+        'https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?auto=format&fit=crop&q=80&w=300', // Male doctor with stethoscope
+        'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&q=80&w=300', // Male doctor portrait
+        'https://images.unsplash.com/photo-1537368910025-700350fe46c7?auto=format&fit=crop&q=80&w=300', // Male doctor smiling
+        'https://images.unsplash.com/photo-1582750433449-648ed127bb54?auto=format&fit=crop&q=80&w=300', // Male medical professional
+        'https://images.unsplash.com/photo-1618498082410-b4aa22193b38?auto=format&fit=crop&q=80&w=300', // Male doctor in clinic
+        'https://images.unsplash.com/photo-1612349316228-5942a9b489c2?auto=format&fit=crop&q=80&w=300', // Male healthcare professional
+        'https://images.unsplash.com/photo-1638202993928-7267aad84c31?auto=format&fit=crop&q=80&w=300', // Male doctor with clipboard
+        'https://images.unsplash.com/photo-1579684385127-1ef15d508118?auto=format&fit=crop&q=80&w=300', // Male doctor office
+      ];
+
+      // Determine gender from name
+      const femaleNames = ['Sarah', 'Anita', 'Elena', 'Clara', 'Maya', 'Olivia', 'Emily', 'Priya', 'Linda', 'Sofia', 'Karen', 'Jean', 'Pepper', 'Janet'];
+      const firstName = name.replace(/^Dr\.\s+/i, '').split(' ')[0];
+      const isFemale = femaleNames.includes(firstName);
+
+      if (isFemale) {
+        return femaleImages[index % femaleImages.length];
+      } else {
+        return maleImages[index % maleImages.length];
+      }
+    };
+
+    let femaleIdx = 0;
+    let maleIdx = 0;
+
     for (let i = 0; i < createdDoctorUsers.length; i++) {
       const user = createdDoctorUsers[i];
       const specialty = specialtiesList[i];
@@ -86,6 +127,14 @@ const seedDatabase = async () => {
       const availDays = ['Mon-Fri', 'Mon-Wed', 'Tue-Thu', 'Wed-Fri'][i % 4];
       const availHours = `${availDays} ${['9am-5pm', '8am-4pm', '10am-6pm', '9am-1pm'][i % 4]}`;
 
+      // Determine gender-appropriate image
+      const femaleNames = ['Sarah', 'Anita', 'Elena', 'Clara', 'Maya', 'Olivia', 'Emily', 'Priya', 'Linda', 'Sofia', 'Karen', 'Jean', 'Pepper', 'Janet'];
+      const firstName = user.name.replace(/^Dr\.\s+/i, '').split(' ')[0];
+      const isFemale = femaleNames.includes(firstName);
+      const imageUrl = isFemale
+        ? getDoctorImageUrl(user.name, femaleIdx++)
+        : getDoctorImageUrl(user.name, maleIdx++);
+
       doctorProfiles.push({
         userId: user.id,
         specialization: specialty,
@@ -93,12 +142,7 @@ const seedDatabase = async () => {
         bio: bio,
         availabilityHours: availHours,
         isAvailable: true,
-        imageUrl: `https://images.unsplash.com/photo-${[
-          '1559839734-2b71ea197ec2', '1622253692010-333f2da6031d',
-          '1537368910025-700350fe46c7', '1594824813573-246434de83fb',
-          '1612349317150-e413f6a5b16d', '1573496359142-b8d87734a5a2',
-          '1622253692010-333f2da6031d', '1537368910025-700350fe46c7'
-        ][i % 8]}?auto=format&fit=crop&q=80&w=300`
+        imageUrl: imageUrl
       });
     }
 
