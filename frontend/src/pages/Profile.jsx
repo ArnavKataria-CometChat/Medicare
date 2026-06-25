@@ -13,7 +13,7 @@ const Profile = ({ navigate }) => {
   // Doctor Profile state
   const [bio, setBio] = useState('');
   const [availabilityHours, setAvailabilityHours] = useState('');
-  const [imageUrl, setImageUrl] = useState('');
+  
   const [specialization, setSpecialization] = useState('');
   const [experienceYears, setExperienceYears] = useState(0);
 
@@ -39,7 +39,7 @@ const Profile = ({ navigate }) => {
         if (profileData.doctorProfile) {
           setBio(profileData.doctorProfile.bio || '');
           setAvailabilityHours(profileData.doctorProfile.availabilityHours || '');
-          setImageUrl(profileData.doctorProfile.imageUrl || '');
+          
           setSpecialization(profileData.doctorProfile.specialization || '');
           setExperienceYears(profileData.doctorProfile.experienceYears || 0);
         }
@@ -75,7 +75,7 @@ const Profile = ({ navigate }) => {
     if (isDoctor) {
       body.bio = bio;
       body.availabilityHours = availabilityHours;
-      body.imageUrl = imageUrl;
+      
       body.specialization = specialization;
       body.experienceYears = parseInt(experienceYears);
     }
@@ -184,15 +184,15 @@ const Profile = ({ navigate }) => {
           Personal <span className="gradient-text">Profile Management</span>
         </h2>
 
-        <form onSubmit={handleProfileUpdate} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           <div className="form-group">
-            <label className="form-label">Full Name</label>
+            <label className="form-label">Full Name (Read-only)</label>
             <input
               type="text"
               className="form-control"
               value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
+              disabled
+              style={{ color: 'var(--text-muted)' }}
             />
           </div>
 
@@ -208,23 +208,13 @@ const Profile = ({ navigate }) => {
           </div>
 
           <div className="form-group">
-            <label className="form-label">Phone Number</label>
+            <label className="form-label">Phone Number (Read-only)</label>
             <input
               type="text"
               className="form-control"
               value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-            />
-          </div>
-
-          <div className="form-group">
-            <label className="form-label">New Password (Leave blank to keep current)</label>
-            <input
-              type="password"
-              className="form-control"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              disabled
+              style={{ color: 'var(--text-muted)' }}
             />
           </div>
 
@@ -236,64 +226,51 @@ const Profile = ({ navigate }) => {
               </h3>
 
               <div className="form-group">
-                <label className="form-label">Specialization</label>
+                <label className="form-label">Specialization (Read-only)</label>
                 <input
                   type="text"
                   className="form-control"
                   value={specialization}
-                  onChange={(e) => setSpecialization(e.target.value)}
-                  required
+                  disabled
+                  style={{ color: 'var(--text-muted)' }}
                 />
               </div>
 
               <div className="form-group">
-                <label className="form-label">Years of Experience</label>
+                <label className="form-label">Years of Experience (Read-only)</label>
                 <input
                   type="number"
                   className="form-control"
                   value={experienceYears}
-                  onChange={(e) => setExperienceYears(e.target.value)}
-                  required
+                  disabled
+                  style={{ color: 'var(--text-muted)' }}
                 />
               </div>
 
               <div className="form-group">
-                <label className="form-label">Weekly Availability Hours</label>
+                <label className="form-label">Weekly Availability Hours (Read-only)</label>
                 <input
                   type="text"
                   className="form-control"
-                  placeholder="e.g. Mon-Fri 9am-5pm"
                   value={availabilityHours}
-                  onChange={(e) => setAvailabilityHours(e.target.value)}
+                  disabled
+                  style={{ color: 'var(--text-muted)' }}
                 />
               </div>
 
               <div className="form-group">
-                <label className="form-label">Profile Image URL</label>
-                <input
-                  type="url"
-                  className="form-control"
-                  value={imageUrl}
-                  onChange={(e) => setImageUrl(e.target.value)}
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Professional Biography</label>
+                <label className="form-label">Professional Biography (Read-only)</label>
                 <textarea
                   className="form-control"
                   rows={4}
                   value={bio}
-                  onChange={(e) => setBio(e.target.value)}
+                  disabled
+                  style={{ color: 'var(--text-muted)' }}
                 />
               </div>
             </>
           )}
-
-          <button type="submit" className="btn btn-primary" style={{ width: '100%', padding: '0.85rem', marginTop: '0.5rem' }} disabled={updatingProfile}>
-            {updatingProfile ? 'Saving updates...' : 'Save Profile Changes'}
-          </button>
-        </form>
+        </div>
       </div>
 
       {/* Patient Health Records Uploads */}

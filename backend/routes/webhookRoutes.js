@@ -4,6 +4,8 @@ import { WebhookLog, CallLog, AgentMetrics, DoctorSession, NotificationLog, User
 import { Op } from 'sequelize';
 import { getAIResponse } from '../controllers/aiController.js';
 import { sendCometChatMessage } from '../services/cometchatService.js';
+import { sendPush } from '../services/pushService.js';
+import { sendExpoPush } from '../services/firebasePushService.js';
 
 const router = express.Router();
 
@@ -43,6 +45,8 @@ function validateSignature(req, res, next) {
 
 async function handleMessageSent(payload) {
   const data = payload.data || {};
+  if (data.category !== 'message') return;
+
   const senderUid = data.sender?.uid;
   const receiverUid = data.receiver?.uid;
 
@@ -62,7 +66,7 @@ async function handleMessageSent(payload) {
   }
 
   // W5: Write to NOTIFICATION_LOG for push delivery tracking (exclude AI assistant replies)
-  if (receiverUid && senderUid !== 'medicare_ai_assistant') {
+  if (receiverUid && receiverUid !== 'medicare_ai_assistant' && senderUid !== 'medicare_ai_assistant') {
     const receiverUser = await User.findOne({ where: { cometChatUid: receiverUid } });
     if (receiverUser) {
       await NotificationLog.create({
@@ -94,18 +98,55 @@ async function handleMessageSent(payload) {
   }
 }
 
-async function handleCallInitiated(payload) {
+async function handleCallInitiated(payload, req) {
   const data = payload.data || {};
+  const sessionId = data.sessionId || data.id || `call_${Date.now()}`;
+
+  const existing = await CallLog.findOne({ where: { sessionId } });
+  if (existing) {
+    console.log(`[Webhook] Call log already exists for sessionId: ${sessionId}`);
+    return;
+  }
 
   // W2: Create call log entry
   await CallLog.create({
-    sessionId: data.sessionId || data.id || `call_${Date.now()}`,
+    sessionId,
     initiatorUid: data.initiator?.uid || data.sender?.uid || 'unknown',
     receiverUid: data.receiver?.uid || 'unknown',
     callType: data.type === 'audio' ? 'voice' : 'video',
     status: 'initiated',
     initiatedAt: new Date(),
   });
+
+  // Background call notification to receiver
+  const receiverUid = data.receiver?.uid;
+  if (receiverUid) {
+    const receiverUser = await User.findOne({ where: { cometChatUid: receiverUid } });
+    if (receiverUser) {
+      const callerName = data.initiator?.name || data.sender?.name || 'Someone';
+      const callType = data.type === 'audio' ? 'voice' : 'video';
+      const title = '📞 Incoming Call';
+      const message = `Incoming ${callType} call from ${callerName}`;
+
+      // Web Push
+      sendPush(receiverUser.id, title, message, '/chats').catch(err => console.error('[Webhook] Call push error:', err));
+      
+      // Expo Push (mobile)
+      sendExpoPush(receiverUser.id, title, message, {
+        type: 'incoming_call',
+        sessionId,
+        callerUid: data.initiator?.uid || data.sender?.uid,
+        callerName,
+        callType
+      }).catch(err => console.error('[Webhook] Call expo push error:', err));
+
+      // Socket Notification
+      const sendSocketNotification = req?.app?.locals?.sendSocketNotification;
+      if (sendSocketNotification) {
+        sendSocketNotification(receiverUser.id, { title, body: message, url: '/chats' });
+      }
+    }
+  }
 }
 
 async function handleCallAccepted(payload) {
@@ -149,20 +190,34 @@ async function handleCallUnanswered(payload) {
 
   // W2: Trigger missed call notification
   const receiverUid = data.receiver?.uid;
-  if (receiverUid) {
+  if (receiverUid && sessionId) {
     const receiverUser = await User.findOne({ where: { cometChatUid: receiverUid } });
     if (receiverUser) {
-      await NotificationLog.create({
-        userId: receiverUser.id,
-        type: 'cometchat',
-        event: 'missed_call',
-        status: 'delivered',
-        payload: JSON.stringify({
-          callerUid: data.initiator?.uid || data.sender?.uid,
-          callerName: data.initiator?.name || data.sender?.name || 'Unknown',
-          callType: data.type || 'voice',
-        }),
+      // Deduplicate missed call notifications using sessionId in payload
+      const existingNotif = await NotificationLog.findOne({
+        where: {
+          userId: receiverUser.id,
+          event: 'missed_call',
+          payload: {
+            [Op.like]: `%"sessionId":"${sessionId}"%`
+          }
+        }
       });
+
+      if (!existingNotif) {
+        await NotificationLog.create({
+          userId: receiverUser.id,
+          type: 'cometchat',
+          event: 'missed_call',
+          status: 'delivered',
+          payload: JSON.stringify({
+            sessionId,
+            callerUid: data.initiator?.uid || data.sender?.uid,
+            callerName: data.initiator?.name || data.sender?.name || 'Unknown',
+            callType: data.type || 'voice',
+          }),
+        });
+      }
     }
   }
 }
@@ -310,7 +365,7 @@ router.post('/cometchat', validateSignature, async (req, res) => {
     const handler = EVENT_HANDLERS[eventType];
     if (handler) {
       try {
-        await handler(payload);
+        await handler(payload, req);
         log.status = 'processed';
       } catch (handlerError) {
         console.error(`[Webhook] Handler error for ${eventType}:`, handlerError);

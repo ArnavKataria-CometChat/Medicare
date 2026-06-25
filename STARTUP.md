@@ -1,4 +1,4 @@
-# Medicare Project Startup Guide
+# Medicare Project Startup & Build Guide
 
 ## Services Overview
 
@@ -10,78 +10,98 @@
 | iOS Simulator | `npx expo run:ios --device "iPhone 17"` | `mobile/` | iPhone 17 Simulator |
 | Android Emulator | `npx expo run:android` | `mobile/` | Pixel 10 Pro XL |
 
-## Startup Steps
+---
 
-### 1. Docker (Backend + PostgreSQL)
+## 1. Docker Build & Deployment (Backend + Database + Frontend Assets)
 
+The application uses a multi-stage Docker build. 
+* **Stage 1 (Frontend Build)**: Compiles the React/Vite frontend static files and minifies assets into a production bundle (`frontend/dist`).
+* **Stage 2 (Production)**: Builds the Node.js production backend, copies the compiled frontend assets into the backend's static directory (`public`), exposes port 5000, runs database migrations, and boots the backend.
+
+### Commands:
 ```bash
 # Start Docker Desktop first
 open -a Docker
 
-# Wait for Docker daemon to be ready, then:
-cd /Users/admin/Desktop/project/Medicare
+# Navigate to the workspace root directory
+cd /Users/admin/Desktop/project/Medicare-Integration
+
+# Build and run the containers in detached mode
 docker compose up --build -d
+
+# Verify containers are running and healthy
+docker compose ps
+
+# (Optional) Seed the database with default users, doctors, and appointments
+docker compose exec app npm run seed
 ```
 
-- `medicare-db`: Postgres 16 (internal only, no host port)
-- `medicare-app`: Node.js backend on port 5000 (production mode)
+* **`medicare-db`**: Postgres database (runs internally, isolated inside the Docker network).
+* **`medicare-app`**: Production server running on port 5000.
 
-### 2. Local Backend (Development)
+---
 
+## 2. Mobile App Build & Bundling
+
+The mobile application is built using Expo Prebuild and React Native. It uses native modules (such as CometChat SDK wrappers, WebRTC, and Jitsi dependencies) and therefore requires native compilation on simulators/emulators rather than sandboxed Expo Go.
+
+### iOS Build & Launch:
 ```bash
-cd /Users/admin/Desktop/project/Medicare/backend
-npm start
-```
+cd /Users/admin/Desktop/project/Medicare-Integration/mobile
 
-Runs on port 5000. Note: conflicts with Docker backend if both are running on the same port.
-
-### 3. Web Frontend
-
-```bash
-cd /Users/admin/Desktop/project/Medicare/frontend
-npm run dev
-```
-
-Vite dev server at http://localhost:3000
-
-### 4. iOS Simulator
-
-iPhone 17 simulator is typically already booted.
-
-```bash
-cd /Users/admin/Desktop/project/Medicare/mobile
+# Build and run the app on the specified simulator
 npx expo run:ios --device "iPhone 17"
 ```
 
-### 5. Android Emulator
-
-The AVD is `Pixel_10_Pro_XL`. The emulator must be started with the correct SDK root.
-
+### Android Build & Launch:
 ```bash
-# Start emulator manually (required due to SDK path issue)
+# Start emulator manually with correct SDK root environment variables
 ANDROID_HOME=$HOME/Library/Android/sdk \
 ANDROID_SDK_ROOT=$HOME/Library/Android/sdk \
 $HOME/Library/Android/sdk/emulator/emulator @Pixel_10_Pro_XL
 
 # Then in a separate terminal:
-cd /Users/admin/Desktop/project/Medicare/mobile
+cd /Users/admin/Desktop/project/Medicare-Integration/mobile
 npx expo run:android
 ```
 
-## Known Issues
+### Tips & Tricks:
+* **Metro Bundle Reloading**: If you make JavaScript/React changes while the simulator is running, focus the terminal running Metro and press `r` to reload the bundle on the active device without a full native rebuild.
+* **Force Bundle Refresh**: If changes are not displaying or have caching issues, stop Metro and launch it with:
+  ```bash
+  npx expo start --clear
+  ```
 
-- **Android emulator SDK path**: The homebrew-installed emulator at `/opt/homebrew/share/android-commandlinetools/emulator/emulator` resolves the wrong SDK root. Always launch using `$HOME/Library/Android/sdk/emulator/emulator` with explicit `ANDROID_SDK_ROOT`.
-- **Port conflict**: Docker backend and local `npm start` both use port 5000. Run only one at a time, or stop Docker with `docker compose down`.
-- **Android emulator lock**: If you get "Running multiple emulators with the same AVD", kill existing emulator processes first: `pkill -f "emulator.*Pixel_10_Pro_XL"`
+---
+
+## 3. Local Development (No Docker)
+
+If developing the backend or frontend locally without Docker:
+
+### Local Backend:
+```bash
+cd /Users/admin/Desktop/project/Medicare-Integration/backend
+npm install
+npm start
+```
+*Note: Ensure Docker is stopped (`docker compose down`) first to avoid port 5000 conflicts.*
+
+### Local Web Frontend:
+```bash
+cd /Users/admin/Desktop/project/Medicare-Integration/frontend
+npm install
+npm run dev
+```
+Vite development server will launch at http://localhost:3000.
+
+---
 
 ## Stopping Services
 
 ```bash
-# Stop Docker
+# Stop Docker containers
 docker compose down
 
-# Kill Android emulator
+# Kill Android emulator processes
 pkill -f "emulator.*Pixel_10_Pro_XL"
-
-# Other processes: Ctrl+C in their respective terminals
 ```

@@ -59,23 +59,38 @@ self.addEventListener('push', (event) => {
       if (payload.notification) {
         data = payload.notification;
       }
-      event.waitUntil(
-        self.registration.showNotification(data.title, {
+      
+      const showNotificationPromise = clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+        const isForeground = windowClients.some((client) => client.visibilityState === 'visible');
+        if (isForeground) {
+          console.log('[Service Worker] App is in foreground, suppressing native VAPID push notification');
+          return;
+        }
+        return self.registration.showNotification(data.title, {
           body: data.body,
           icon: '/favicon.ico',
           badge: '/favicon.ico',
           data: { url: data.data?.url || '/dashboard' },
-        })
-      );
+        });
+      });
+      
+      event.waitUntil(showNotificationPromise);
     } catch (err) {
       // Not JSON — show as text
-      event.waitUntil(
-        self.registration.showNotification('MediCare', {
+      const showNotificationPromise = clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+        const isForeground = windowClients.some((client) => client.visibilityState === 'visible');
+        if (isForeground) {
+          console.log('[Service Worker] App is in foreground, suppressing native VAPID push notification (plain text)');
+          return;
+        }
+        return self.registration.showNotification('MediCare', {
           body: event.data.text(),
           icon: '/favicon.ico',
           data: { url: '/dashboard' },
-        })
-      );
+        });
+      });
+      
+      event.waitUntil(showNotificationPromise);
     }
   }
 });

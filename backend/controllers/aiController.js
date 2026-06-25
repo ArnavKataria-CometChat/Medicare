@@ -116,7 +116,16 @@ Rules:
 
 export const processAIChat = async (req, res, next) => {
   try {
-    const { message } = req.body;
+    let message = req.body.message;
+
+    // Support both web (message) and mobile (messages array)
+    if (!message && Array.isArray(req.body.messages)) {
+      const userMessages = req.body.messages.filter((m) => m.role === 'user');
+      if (userMessages.length > 0) {
+        message = userMessages[userMessages.length - 1].content;
+      }
+    }
+
     const response = await getAIResponse(message);
     const { reply, suggestedAction, suggestedParams } = response;
 

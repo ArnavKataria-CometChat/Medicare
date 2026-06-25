@@ -33,7 +33,7 @@ export const getConversations = async (req, res) => {
       include: [{
         model: DoctorProfile,
         as: 'doctorProfile',
-        attributes: ['specialization', 'imageUrl'],
+        attributes: ['specialization', ],
         required: false
       }]
     });
@@ -66,7 +66,7 @@ export const getConversations = async (req, res) => {
         email: contact.email,
         role: contact.role,
         specialization: contact.doctorProfile?.specialization || null,
-        imageUrl: contact.doctorProfile?.imageUrl || null,
+        imageUrl: null,
         lastMessage: lastMessage ? {
           content: lastMessage.content,
           time: lastMessage.createdAt,
@@ -170,7 +170,7 @@ export const getChatContacts = async (req, res) => {
             email: appt.doctorProfile.user.email,
             role: 'DOCTOR',
             specialization: appt.doctorProfile.specialization || null,
-            imageUrl: appt.doctorProfile.imageUrl || null,
+            imageUrl: null,
             chatEnded: existing ? (existing.chatEnded && !isActive) : !isActive,
           });
         }

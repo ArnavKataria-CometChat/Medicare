@@ -75,6 +75,20 @@ export default function CallSurfaces() {
   const [ongoingCallSession, setOngoingCallSession] = useState(null);
   const [callType, setCallType] = useState(null); // 'audio' or 'video'
   const permissionsRequested = useRef(false);
+  const transitioningSessionId = useRef(null);
+
+  const incomingCallRef = useRef(null);
+  const outgoingCallRef = useRef(null);
+
+  const updateIncomingCall = (val) => {
+    incomingCallRef.current = val;
+    setIncomingCall(val);
+  };
+
+  const updateOutgoingCall = (val) => {
+    outgoingCallRef.current = val;
+    setOutgoingCall(val);
+  };
 
   // Request permissions on mount (Android)
   useEffect(() => {
@@ -97,6 +111,36 @@ export default function CallSurfaces() {
     };
   }, [isCallActive]);
 
+  const transitionToOngoing = (sid, type) => {
+    if (!sid) return;
+    if (transitioningSessionId.current === sid) {
+      console.log('[CallSurfaces] Already transitioning or transitioned to session:', sid);
+      return;
+    }
+    transitioningSessionId.current = sid;
+
+    console.log('[CallSurfaces] Transitioning to ongoing call. Clearing incoming/outgoing overlays first.');
+    updateIncomingCall(null);
+    updateOutgoingCall(null);
+
+    // Delay mounting ongoing call to avoid native Modal presentation collisions
+    setTimeout(() => {
+      console.log('[CallSurfaces] Mounting CometChatOngoingCall for session:', sid);
+      setOngoingCallSession(sid);
+      setCallType(type);
+    }, 500);
+  };
+
+  const resetCallStates = () => {
+    transitioningSessionId.current = null;
+    incomingCallRef.current = null;
+    outgoingCallRef.current = null;
+    setIncomingCall(null);
+    setOutgoingCall(null);
+    setOngoingCallSession(null);
+    setCallType(null);
+  };
+
   useEffect(() => {
     if (!CometChat || !CometChatUIEventHandler) {
       return;
@@ -107,20 +151,22 @@ export default function CallSurfaces() {
       CALL_LISTENER_ID,
       new CometChat.CallListener({
         onIncomingCallReceived: (call) => {
-          console.log('[CallSurfaces] Incoming call received:', call?.getSessionId());
-          setIncomingCall(call);
+          const sid = call?.getSessionId?.() || call?.sessionId;
+          console.log('[CallSurfaces] Incoming call received:', sid);
+          updateIncomingCall(call);
         },
         onIncomingCallCancelled: (call) => {
           console.log('[CallSurfaces] Incoming call cancelled');
-          setIncomingCall(null);
+          resetCallStates();
         },
         onOutgoingCallAccepted: (call) => {
-          console.log('[CallSurfaces] Outgoing call accepted');
-          // Outgoing will transition to ongoing via ccShowOngoingCall event
+          const sid = call?.getSessionId?.() || call?.sessionId;
+          console.log('[CallSurfaces] Outgoing call accepted:', sid);
+          // Do nothing. Allow the CometChatOutgoingCall component to transition internally.
         },
         onOutgoingCallRejected: (call) => {
           console.log('[CallSurfaces] Outgoing call rejected');
-          setOutgoingCall(null);
+          resetCallStates();
         },
       })
     );
@@ -128,38 +174,39 @@ export default function CallSurfaces() {
     // UI Kit event listener — outgoing initiated, call ended, show ongoing
     CometChatUIEventHandler.addCallListener(CALL_LISTENER_ID, {
       ccOutgoingCall: ({ call }) => {
-        console.log('[CallSurfaces] UI event: outgoing call', call?.getSessionId());
-        setOutgoingCall(call);
-        setCallType(call?.getType() === 'audio' ? 'audio' : 'video');
+        const sid = call?.getSessionId?.() || call?.sessionId || call?.getData?.()?.sessionId;
+        console.log('[CallSurfaces] UI event: outgoing call', sid);
+        updateOutgoingCall(call);
+        setCallType(call?.getType?.() === 'audio' ? 'audio' : 'video');
       },
       ccCallEnded: () => {
         console.log('[CallSurfaces] UI event: call ended');
-        setOutgoingCall(null);
-        setIncomingCall(null);
-        setOngoingCallSession(null);
-        setCallType(null);
+        resetCallStates();
       },
       ccCallRejected: () => {
         console.log('[CallSurfaces] UI event: call rejected');
-        setOutgoingCall(null);
-        setIncomingCall(null);
+        resetCallStates();
       },
       ccCallFailled: () => {
         // Note: typo "Failled" is from the kit's event name
         console.log('[CallSurfaces] UI event: call failed');
-        setOutgoingCall(null);
-        setIncomingCall(null);
-        setOngoingCallSession(null);
+        resetCallStates();
       },
       ccShowOngoingCall: ({ call, sessionId }) => {
-        console.log('[CallSurfaces] UI event: show ongoing call, sessionId:', sessionId || call?.getSessionId());
-        const sid = sessionId || call?.getSessionId();
-        const type = call?.getType() === 'audio' ? 'audio' : 'video';
-        setOngoingCallSession(sid);
-        setCallType(type);
-        // Clear incoming/outgoing since we're now in ongoing
-        setIncomingCall(null);
-        setOutgoingCall(null);
+        const sid = sessionId || call?.getSessionId?.() || call?.sessionId;
+        const type = call?.getType?.() === 'audio' ? 'audio' : 'video';
+        console.log('[CallSurfaces] UI event: show ongoing call, sessionId:', sid);
+        
+        // If we are already in a 1-to-1 incoming/outgoing flow, the component 
+        // will handle showing the ongoing call internally. Do not set ongoingCallSession
+        // to avoid unmounting the 1-to-1 component and causing native modal collisions.
+        if (incomingCallRef.current || outgoingCallRef.current) {
+          console.log('[CallSurfaces] 1-to-1 call flow active; allowing native internal transition.');
+          return;
+        }
+
+        // For group calls or direct sessions, mount CometChatOngoingCall manually
+        transitionToOngoing(sid, type);
       },
     });
 
@@ -191,11 +238,11 @@ export default function CallSurfaces() {
             call={incomingCall}
             onDecline={() => {
               console.log('[CallSurfaces] User declined incoming call');
-              setIncomingCall(null);
+              resetCallStates();
             }}
             onError={(error) => {
               console.warn('[CallSurfaces] Incoming call error:', error);
-              setIncomingCall(null);
+              resetCallStates();
             }}
             // NO onAccept — kit owns the accept path internally
           />
@@ -209,11 +256,11 @@ export default function CallSurfaces() {
             call={outgoingCall}
             onDecline={() => {
               console.log('[CallSurfaces] User cancelled outgoing call');
-              setOutgoingCall(null);
+              resetCallStates();
             }}
             onError={(error) => {
               console.warn('[CallSurfaces] Outgoing call error:', error);
-              setOutgoingCall(null);
+              resetCallStates();
             }}
           />
         </View>
@@ -227,8 +274,7 @@ export default function CallSurfaces() {
             callSettingsBuilder={getCallSettingsBuilder()}
             onError={(error) => {
               console.warn('[CallSurfaces] Ongoing call error:', error);
-              setOngoingCallSession(null);
-              setCallType(null);
+              resetCallStates();
             }}
           />
         </View>

@@ -125,40 +125,41 @@ export const bookAppointment = async (req, res, next) => {
     // 3. Create Notification Logs
     const message = `Your appointment with ${doctorProfile.user.name} on ${appointmentDate} at ${appointmentTime} has been confirmed.`;
     
+    const sendSocketNotification = req.app.locals.sendSocketNotification;
+
     // Patient Notification
-    await NotificationLog.create({
-      userId: patientId,
-      type: 'app',
-      event: 'APPOINTMENT_BOOKED',
-      status: 'delivered',
-      payload: JSON.stringify({ message, appointmentId: appointment.id })
-    });
+    if (req.user.id !== patientId) {
+      await NotificationLog.create({
+        userId: patientId,
+        type: 'app',
+        event: 'APPOINTMENT_BOOKED',
+        status: 'delivered',
+        payload: JSON.stringify({ message, appointmentId: appointment.id })
+      });
+      sendPush(patientId, 'Appointment Confirmed', message, '/appointments').catch(err => console.error('Patient push failed:', err.message));
+      sendExpoPush(patientId, 'Appointment Confirmed', message, { type: 'appointment_booked', appointmentId: appointment.id }).catch(err => console.error('Patient expo push failed:', err.message));
+      if (sendSocketNotification) {
+        sendSocketNotification(patientId, { title: '✅ Appointment Confirmed', body: message, url: '/appointments' });
+      }
+    }
 
     // Doctor Notification
-    await NotificationLog.create({
-      userId: doctorProfile.user.id,
-      type: 'app',
-      event: 'APPOINTMENT_BOOKED',
-      status: 'delivered',
-      payload: JSON.stringify({
-        message: `New appointment booked by Patient: ${req.user.name} on ${appointmentDate} at ${appointmentTime}.`,
-        appointmentId: appointment.id
-      })
-    });
-
-    // Send Push Notifications in background
-    sendPush(patientId, 'Appointment Confirmed', message, '/appointments').catch(err => console.error('Patient push failed:', err.message));
-    sendPush(doctorProfile.user.id, 'New Appointment Booked', `New appointment booked by Patient: ${req.user.name} on ${appointmentDate} at ${appointmentTime}.`, '/appointments').catch(err => console.error('Doctor push failed:', err.message));
-
-    // Send Expo Push (mobile)
-    sendExpoPush(patientId, 'Appointment Confirmed', message, { type: 'appointment_booked', appointmentId: appointment.id }).catch(err => console.error('Patient expo push failed:', err.message));
-    sendExpoPush(doctorProfile.user.id, 'New Appointment Booked', `New appointment booked by Patient: ${req.user.name} on ${appointmentDate} at ${appointmentTime}.`, { type: 'appointment_booked', appointmentId: appointment.id }).catch(err => console.error('Doctor expo push failed:', err.message));
-
-    // Send real-time socket notifications (in-app toast)
-    const sendSocketNotification = req.app.locals.sendSocketNotification;
-    if (sendSocketNotification) {
-      sendSocketNotification(patientId, { title: '✅ Appointment Confirmed', body: message, url: '/appointments' });
-      sendSocketNotification(doctorProfile.user.id, { title: '📅 New Appointment', body: `New appointment booked by ${req.user.name} on ${appointmentDate} at ${appointmentTime}.`, url: '/appointments' });
+    if (req.user.id !== doctorProfile.user.id) {
+      await NotificationLog.create({
+        userId: doctorProfile.user.id,
+        type: 'app',
+        event: 'APPOINTMENT_BOOKED',
+        status: 'delivered',
+        payload: JSON.stringify({
+          message: `New appointment booked by Patient: ${req.user.name} on ${appointmentDate} at ${appointmentTime}.`,
+          appointmentId: appointment.id
+        })
+      });
+      sendPush(doctorProfile.user.id, 'New Appointment Booked', `New appointment booked by Patient: ${req.user.name} on ${appointmentDate} at ${appointmentTime}.`, '/appointments').catch(err => console.error('Doctor push failed:', err.message));
+      sendExpoPush(doctorProfile.user.id, 'New Appointment Booked', `New appointment booked by Patient: ${req.user.name} on ${appointmentDate} at ${appointmentTime}.`, { type: 'appointment_booked', appointmentId: appointment.id }).catch(err => console.error('Doctor expo push failed:', err.message));
+      if (sendSocketNotification) {
+        sendSocketNotification(doctorProfile.user.id, { title: '📅 New Appointment', body: `New appointment booked by ${req.user.name} on ${appointmentDate} at ${appointmentTime}.`, url: '/appointments' });
+      }
     }
 
     // 4. Log Activity
@@ -240,37 +241,38 @@ export const cancelAppointment = async (req, res, next) => {
     const patientMsg = `Your appointment with ${docName} on ${dateStr} at ${timeStr} has been cancelled.`;
     const doctorMsg = `Your appointment with ${patName} on ${dateStr} at ${timeStr} has been cancelled.`;
 
+    const sendSocketNotification = req.app.locals.sendSocketNotification;
+
     // Patient Notification
-    await NotificationLog.create({
-      userId: appointment.patientId,
-      type: 'app',
-      event: 'APPOINTMENT_CANCELLED',
-      status: 'delivered',
-      payload: JSON.stringify({ message: patientMsg, appointmentId: appointment.id })
-    });
+    if (req.user.id !== appointment.patientId) {
+      await NotificationLog.create({
+        userId: appointment.patientId,
+        type: 'app',
+        event: 'APPOINTMENT_CANCELLED',
+        status: 'delivered',
+        payload: JSON.stringify({ message: patientMsg, appointmentId: appointment.id })
+      });
+      sendPush(appointment.patientId, 'Appointment Cancelled', patientMsg, '/appointments').catch(err => console.error('Patient push failed:', err.message));
+      sendExpoPush(appointment.patientId, 'Appointment Cancelled', patientMsg, { type: 'appointment_cancelled', appointmentId: appointment.id }).catch(err => console.error('Patient expo push failed:', err.message));
+      if (sendSocketNotification) {
+        sendSocketNotification(appointment.patientId, { title: '❌ Appointment Cancelled', body: patientMsg, url: '/appointments' });
+      }
+    }
 
     // Doctor Notification
-    await NotificationLog.create({
-      userId: appointment.doctorProfile.user.id,
-      type: 'app',
-      event: 'APPOINTMENT_CANCELLED',
-      status: 'delivered',
+    if (req.user.id !== appointment.doctorProfile.user.id) {
+      await NotificationLog.create({
+        userId: appointment.doctorProfile.user.id,
+        type: 'app',
+        event: 'APPOINTMENT_CANCELLED',
+        status: 'delivered',
         payload: JSON.stringify({ message: doctorMsg, appointmentId: appointment.id })
-    });
-
-    // Send Push Notifications in background
-    sendPush(appointment.patientId, 'Appointment Cancelled', patientMsg, '/appointments').catch(err => console.error('Patient push failed:', err.message));
-    sendPush(appointment.doctorProfile.user.id, 'Appointment Cancelled', doctorMsg, '/appointments').catch(err => console.error('Doctor push failed:', err.message));
-
-    // Send Expo Push (mobile)
-    sendExpoPush(appointment.patientId, 'Appointment Cancelled', patientMsg, { type: 'appointment_cancelled', appointmentId: appointment.id }).catch(err => console.error('Patient expo push failed:', err.message));
-    sendExpoPush(appointment.doctorProfile.user.id, 'Appointment Cancelled', doctorMsg, { type: 'appointment_cancelled', appointmentId: appointment.id }).catch(err => console.error('Doctor expo push failed:', err.message));
-
-    // Send real-time socket notifications (in-app toast)
-    const sendSocketNotification = req.app.locals.sendSocketNotification;
-    if (sendSocketNotification) {
-      sendSocketNotification(appointment.patientId, { title: '❌ Appointment Cancelled', body: patientMsg, url: '/appointments' });
-      sendSocketNotification(appointment.doctorProfile.user.id, { title: '❌ Appointment Cancelled', body: doctorMsg, url: '/appointments' });
+      });
+      sendPush(appointment.doctorProfile.user.id, 'Appointment Cancelled', doctorMsg, '/appointments').catch(err => console.error('Doctor push failed:', err.message));
+      sendExpoPush(appointment.doctorProfile.user.id, 'Appointment Cancelled', doctorMsg, { type: 'appointment_cancelled', appointmentId: appointment.id }).catch(err => console.error('Doctor expo push failed:', err.message));
+      if (sendSocketNotification) {
+        sendSocketNotification(appointment.doctorProfile.user.id, { title: '❌ Appointment Cancelled', body: doctorMsg, url: '/appointments' });
+      }
     }
 
     // Log Activity

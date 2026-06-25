@@ -98,13 +98,9 @@ const DoctorsDirectoryScreen = ({ navigation }) => {
         activeOpacity={0.8}
       >
         <View style={styles.cardHeader}>
-          {item.imageUrl ? (
-            <Image source={{ uri: item.imageUrl }} style={styles.avatarImage} />
-          ) : (
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{getInitials(item.user?.name)}</Text>
-            </View>
-          )}
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>{getInitials(item.user?.name)}</Text>
+          </View>
           <View style={styles.headerInfo}>
             <Text style={styles.docName}>{item.user?.name || 'Doctor'}</Text>
             <View style={styles.specialtyBadge}>

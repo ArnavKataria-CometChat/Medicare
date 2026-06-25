@@ -57,7 +57,6 @@ const DoctorDetails = ({ navigate, doctorId }) => {
     );
   }
 
-  const image = doctor.imageUrl || 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=300';
   const name = doctor.user?.name || 'Doctor';
 
   return (
@@ -71,20 +70,8 @@ const DoctorDetails = ({ navigate, doctorId }) => {
       </div>
 
       <div className="glass-panel" style={{ padding: '3rem', display: 'flex', gap: '3rem', flexWrap: 'wrap' }}>
-        {/* Left image column */}
-        <div style={{ flex: '1 1 300px', maxWidth: '350px' }}>
-          <img
-            src={image}
-            alt={name}
-            style={{ width: '100%', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-glass)', objectFit: 'cover', minHeight: '350px' }}
-            onError={(e) => {
-              e.target.src = 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=300';
-            }}
-          />
-        </div>
-
         {/* Right content column */}
-        <div style={{ flex: '2 1 400px', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        <div style={{ flex: '1', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
             <div>
               <h1 style={{ fontSize: '2.5rem' }}>{name}</h1>

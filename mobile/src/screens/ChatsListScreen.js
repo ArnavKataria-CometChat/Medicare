@@ -20,7 +20,8 @@ let CometChatConversations = null;
 let CometChat = null;
 
 try {
-  CometChatConversations = require('@cometchat/chat-uikit-react-native').CometChatConversations;
+  const uikit = require('@cometchat/chat-uikit-react-native');
+  CometChatConversations = uikit.CometChatConversations;
   CometChat = require('@cometchat/chat-sdk-react-native').CometChat;
 } catch (e) {
   console.warn('[ChatsListScreen] CometChat not available:', e.message);
@@ -269,6 +270,67 @@ const ChatsListScreen = ({ navigation }) => {
           {CometChatConversations ? (
             <CometChatConversations
               onItemPress={handleConversationPress}
+              hideHeader={true}
+              conversationsRequestBuilder={(() => {
+                const builder = new CometChat.ConversationsRequestBuilder().setLimit(30);
+                const originalBuild = builder.build;
+                builder.build = function() {
+                  const request = originalBuild.apply(this, arguments);
+                  const originalFetchNext = request.fetchNext;
+                  if (originalFetchNext) {
+                    request.fetchNext = function() {
+                      return originalFetchNext.apply(this, arguments).then((conversations) => {
+                        if (!conversations) return conversations;
+                        
+                        conversations.forEach(conv => {
+                          const conversationWith = conv.getConversationWith();
+                          if (conversationWith) {
+                            const isUser = conv.getConversationType() === 'user';
+                            const isGroup = conv.getConversationType() === 'group';
+                            
+                            let name = '';
+                            if (typeof conversationWith.getName === 'function') name = conversationWith.getName();
+                            else if (conversationWith.name) name = conversationWith.name;
+
+                            let role = '';
+                            if (typeof conversationWith.getRole === 'function') role = conversationWith.getRole();
+                            else if (conversationWith.role) role = conversationWith.role;
+
+                            let uid = '';
+                            if (typeof conversationWith.getUid === 'function') uid = conversationWith.getUid();
+                            else if (conversationWith.uid) uid = conversationWith.uid;
+
+                            const isDoctor = isUser && (role === 'doctor' || name.toLowerCase().startsWith('dr.'));
+                            const isAIAgent = isUser && uid === 'medicare_ai_assistant';
+
+                            // Strip "Dr." prefix so initials render as "RC" not "DR"
+                            if (isDoctor) {
+                              const cleanName = name.replace(/^dr\.\s+/i, '').trim();
+                              if (typeof conversationWith.setName === 'function') conversationWith.setName(cleanName);
+                              conversationWith.name = cleanName;
+                            } else if (isAIAgent) {
+                              if (typeof conversationWith.setName === 'function') conversationWith.setName('AI Assistant');
+                              conversationWith.name = 'AI Assistant';
+                            }
+                          }
+                        });
+
+                        return conversations.filter(conv => {
+                          const conversationWith = conv.getConversationWith();
+                          if (conv.getConversationType() === 'user' && conversationWith) {
+                            const uid = typeof conversationWith.getUid === 'function'
+                              ? conversationWith.getUid() : conversationWith.uid;
+                            return uid !== 'medicare_ai_assistant';
+                          }
+                          return true;
+                        });
+                      });
+                    };
+                  }
+                  return request;
+                };
+                return builder;
+              })()}
             />
           ) : (
             <View style={styles.emptyContainer}>

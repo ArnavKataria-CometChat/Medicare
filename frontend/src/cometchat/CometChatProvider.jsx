@@ -1,7 +1,92 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { CometChatUIKit, UIKitSettingsBuilder, CometChatIncomingCall } from '@cometchat/chat-uikit-react';
+import { CometChatUIKit, UIKitSettingsBuilder, CometChatIncomingCall, CometChatOutgoingCall } from '@cometchat/chat-uikit-react';
 import { CometChatCalls } from '@cometchat/calls-sdk-javascript';
 import { CometChat } from '@cometchat/chat-sdk-javascript';
+
+// Apply global CometChat SDK interceptor for call message deduplication
+const globalSeenCallKeys = new Set();
+
+function applyCometChatInterceptor(sdk) {
+  if (!sdk) return;
+
+  // 1. Intercept MessagesRequestBuilder
+  if (sdk.MessagesRequestBuilder && sdk.MessagesRequestBuilder.prototype) {
+    const originalBuild = sdk.MessagesRequestBuilder.prototype.build;
+    if (originalBuild && !originalBuild.__isIntercepted) {
+      sdk.MessagesRequestBuilder.prototype.build = function() {
+        const request = originalBuild.apply(this, arguments);
+        if (request) {
+          const originalFetchPrevious = request.fetchPrevious;
+          if (originalFetchPrevious && !originalFetchPrevious.__isIntercepted) {
+            request.fetchPrevious = function() {
+              return originalFetchPrevious.apply(this, arguments).then((messages) => {
+                if (!messages) return messages;
+                return messages.filter((msg) => {
+                  const isCall = msg && (msg.getCategory?.() === 'call' || msg.category === 'call');
+                  if (isCall) {
+                    const action = msg.getAction?.() || msg.action;
+                    const sessionId = msg.getSessionId?.() || msg.sessionId || (msg.getData?.()?.sessionId);
+                    if (action && sessionId) {
+                      const key = `${sessionId}-${action}`;
+                      if (globalSeenCallKeys.has(key)) return false;
+                      globalSeenCallKeys.add(key);
+                    }
+                  }
+                  return true;
+                });
+              });
+            };
+            request.fetchPrevious.__isIntercepted = true;
+          }
+        }
+        return request;
+      };
+      sdk.MessagesRequestBuilder.prototype.build.__isIntercepted = true;
+    }
+  }
+
+  // 2. Intercept addMessageListener
+  const originalAddMessageListener = sdk.addMessageListener;
+  if (originalAddMessageListener && !originalAddMessageListener.__isIntercepted) {
+    sdk.addMessageListener = function(listenerId, listener) {
+      if (!listener) return originalAddMessageListener.call(this, listenerId, listener);
+
+      const wrappedListener = { ...listener };
+
+      const wrapCallback = (callbackName) => {
+        if (typeof listener[callbackName] === 'function') {
+          wrappedListener[callbackName] = function(message) {
+            const isCall = message && (message.getCategory?.() === 'call' || message.category === 'call');
+            if (isCall) {
+              const action = message.getAction?.() || message.action;
+              const sessionId = message.getSessionId?.() || message.sessionId || (message.getData?.()?.sessionId);
+              if (action && sessionId) {
+                const key = `${sessionId}-${action}`;
+                if (globalSeenCallKeys.has(key)) {
+                  console.log(`[CometChat Interceptor] Filtered duplicate real-time message: ${key}`);
+                  return; // Discard duplicate
+                }
+                globalSeenCallKeys.add(key);
+              }
+            }
+            return listener[callbackName].apply(this, arguments);
+          };
+        }
+      };
+
+      wrapCallback('onTextMessageReceived');
+      wrapCallback('onMediaMessageReceived');
+      wrapCallback('onCustomMessageReceived');
+
+      return originalAddMessageListener.call(this, listenerId, wrappedListener);
+    };
+    sdk.addMessageListener.__isIntercepted = true;
+  }
+
+
+}
+
+applyCometChatInterceptor(CometChat);
 import { formatCometChatError, logCometChatError } from './errors';
 import CometChatNotifier from './CometChatNotifier';
 import { useToast } from '../context/ToastContext';
@@ -71,6 +156,7 @@ export const useCometChat = () => useContext(CometChatContext);
 
 // Module-level guards for init + login (prevents StrictMode double-invoke issues)
 let initialized = false;
+let callsInitialized = false;
 let loginInFlight = null;
 
 /**
@@ -107,7 +193,13 @@ export function CometChatProvider({ token, user, children }) {
             try {
               CometChatUIKit.logout().catch(() => {});
             } catch {}
+            try {
+              if (CometChatCalls.getLoggedInUser()) {
+                CometChatCalls.logout().catch(() => {});
+              }
+            } catch {}
             initialized = false;
+            callsInitialized = false;
             loginInFlight = null;
           })
           .catch((err) => console.warn('[CometChat] Reactive logout failed:', err));
@@ -141,12 +233,6 @@ export function CometChatProvider({ token, user, children }) {
 
           await CometChatUIKit.init(settings);
           initialized = true;
-
-          // 2b. Initialize Calls SDK
-          const callsInit = await CometChatCalls.init({ appId, region });
-          if (!callsInit?.success) {
-            console.warn('[CometChat] Calls SDK init returned non-success:', callsInit?.error);
-          }
         }
 
         // 3. Sync user with backend → get auth token
@@ -205,8 +291,19 @@ export function CometChatProvider({ token, user, children }) {
           }
         }
 
-        // 4b. Login Calls SDK
-        if (!CometChatCalls.getLoggedInUser()) {
+        // 4b. Initialize Calls SDK after Chat SDK login resolves (once)
+        if (!callsInitialized) {
+          const callsInit = await CometChatCalls.init({ appId, region });
+          if (callsInit?.success) {
+            callsInitialized = true;
+            console.log('[CometChat] Calls SDK initialized successfully after login');
+          } else {
+            console.warn('[CometChat] Calls SDK init returned non-success:', callsInit?.error);
+          }
+        }
+
+        // 4c. Login Calls SDK
+        if (callsInitialized && !CometChatCalls.getLoggedInUser()) {
           await CometChatCalls.loginWithAuthToken(authToken);
         }
 
@@ -216,7 +313,8 @@ export function CometChatProvider({ token, user, children }) {
         setIsReady(true);
 
         registerFcmWebPush((payload) => {
-          // Foreground push callback — show in-app toast
+          // Foreground push callback — show in-app toast (disabled to prevent duplicate toasts)
+          /*
           const notification = payload.notification || {};
           const data = payload.data || {};
 
@@ -230,6 +328,7 @@ export function CometChatProvider({ token, user, children }) {
           if (addToast && title) {
             addToast(`💬 ${title}: ${body}`, 'info');
           }
+          */
         }).catch((err) => {
           console.warn('[CometChat] FCM push registration failed (non-fatal):', err);
         });
@@ -285,6 +384,7 @@ export function CometChatProvider({ token, user, children }) {
           `}</style>
           <div className="cometchat-call-overlay">
             <CometChatIncomingCall />
+            <CometChatOutgoingCall />
           </div>
           <OngoingCallElevator />
           <CometChatNotifier isReady={isReady} addToast={addToast} />

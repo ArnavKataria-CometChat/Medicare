@@ -70,13 +70,9 @@ const DoctorDetailsScreen = ({ route, navigation }) => {
       <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
         {/* Profile Card */}
         <View style={styles.profileCard}>
-          {doctor.imageUrl ? (
-            <Image source={{ uri: doctor.imageUrl }} style={styles.avatarImage} />
-          ) : (
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{getInitials(doctor.user?.name)}</Text>
-            </View>
-          )}
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>{getInitials(doctor.user?.name)}</Text>
+          </View>
           <Text style={styles.docName}>{doctor.user?.name || 'Doctor'}</Text>
           <View style={styles.specialtyBadge}>
             <Text style={styles.specialtyText}>{doctor.specialization}</Text>

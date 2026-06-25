@@ -44,7 +44,7 @@ export const adminGetUsers = async (req, res, next) => {
 export const adminCreateUser = async (req, res, next) => {
   const transaction = await sequelize.transaction();
   try {
-    const { name, email, password, phone, role, status = 'active', specialization, experienceYears, bio, availabilityHours, imageUrl } = req.body;
+    const { name, email, password, phone, role, status = 'active', specialization, experienceYears, bio, availabilityHours } = req.body;
 
     if (!name || !email || !password || !role) {
       return res.status(400).json({ error: 'Name, email, password, and role are required.' });
@@ -71,7 +71,7 @@ export const adminCreateUser = async (req, res, next) => {
         experienceYears: experienceYears || 0,
         bio: bio || '',
         availabilityHours: availabilityHours || 'Mon-Fri 9am-5pm',
-        imageUrl: imageUrl || '',
+        
         isAvailable: true
       }, { transaction });
     }
@@ -135,7 +135,7 @@ export const adminUpdateUser = async (req, res, next) => {
       return res.status(404).json({ error: 'User not found.' });
     }
 
-    const { name, email, password, phone, role, status, specialization, experienceYears, bio, availabilityHours, imageUrl, isAvailable } = req.body;
+    const { name, email, password, phone, role, status, specialization, experienceYears, bio, availabilityHours, isAvailable } = req.body;
 
     if (name) user.name = name;
     if (email) user.email = email;
@@ -157,7 +157,7 @@ export const adminUpdateUser = async (req, res, next) => {
       if (experienceYears !== undefined) profile.experienceYears = experienceYears;
       if (bio !== undefined) profile.bio = bio;
       if (availabilityHours !== undefined) profile.availabilityHours = availabilityHours;
-      if (imageUrl !== undefined) profile.imageUrl = imageUrl;
+      
       if (isAvailable !== undefined) profile.isAvailable = isAvailable;
 
       await profile.save({ transaction });

@@ -134,7 +134,7 @@ router.get('/contacts', async (req, res, next) => {
             role: u.role,
             cometChatUid: u.cometChatUid,
             specialization: appt.doctorProfile.specialization || null,
-            imageUrl: appt.doctorProfile.imageUrl || null,
+            
             chatEnded: existing ? (existing.chatEnded && !isActive) : !isActive,
           });
         }
@@ -177,7 +177,7 @@ router.get('/contacts', async (req, res, next) => {
               role: p.role,
               cometChatUid: p.cometChatUid,
               specialization: null,
-              imageUrl: null,
+              
               chatEnded: existing ? (existing.chatEnded && !isActive) : !isActive,
             });
           }
@@ -197,7 +197,7 @@ router.get('/contacts', async (req, res, next) => {
         include: [{
           model: DoctorProfile,
           as: 'doctorProfile',
-          attributes: ['specialization', 'imageUrl'],
+          attributes: ['specialization'],
         }],
       });
 
@@ -208,7 +208,7 @@ router.get('/contacts', async (req, res, next) => {
         role: d.role,
         cometChatUid: d.cometChatUid,
         specialization: d.doctorProfile?.specialization || null,
-        imageUrl: d.doctorProfile?.imageUrl || null,
+        
         chatEnded: false,
       }));
 
@@ -228,7 +228,7 @@ router.get('/contacts', async (req, res, next) => {
         include: [{
           model: DoctorProfile,
           as: 'doctorProfile',
-          attributes: ['specialization', 'imageUrl'],
+          attributes: ['specialization'],
           required: false,
         }],
         limit: parseInt(limit),
@@ -243,7 +243,7 @@ router.get('/contacts', async (req, res, next) => {
         role: u.role,
         cometChatUid: u.cometChatUid,
         specialization: u.doctorProfile?.specialization || null,
-        imageUrl: u.doctorProfile?.imageUrl || null,
+        
       }));
     }
 

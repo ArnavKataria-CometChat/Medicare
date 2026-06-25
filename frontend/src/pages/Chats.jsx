@@ -7,6 +7,7 @@ import {
   CometChatMessageComposer,
   CometChatMessageHeader,
   CometChatCallButtons,
+  CometChatAvatar,
 } from '@cometchat/chat-uikit-react';
 import { CometChat } from '@cometchat/chat-sdk-javascript';
 
@@ -190,6 +191,28 @@ const Chats = ({ navigate }) => {
     }
     try {
       const ccUser = await CometChat.getUser(contact.cometChatUid);
+      if (ccUser) {
+        const role = ccUser.getRole?.() || ccUser.role || '';
+        const name = ccUser.getName?.() || ccUser.name || '';
+        const isDoctor = role === 'doctor' || name.toLowerCase().startsWith('dr.');
+        const isAIAgent = contact.cometChatUid === 'medicare_ai_assistant';
+        
+        if (isDoctor || isAIAgent) {
+          if (typeof ccUser.setAvatar === 'function') ccUser.setAvatar(undefined);
+          ccUser.avatar = undefined;
+          if (typeof ccUser.setIcon === 'function') ccUser.setIcon(undefined);
+          ccUser.icon = undefined;
+          
+          if (isDoctor) {
+            const cleanName = name.replace(/^dr\.\s+/i, '').trim();
+            if (typeof ccUser.setName === 'function') ccUser.setName(cleanName);
+            ccUser.name = cleanName;
+          } else if (isAIAgent) {
+            if (typeof ccUser.setName === 'function') ccUser.setName('AI');
+            ccUser.name = 'AI';
+          }
+        }
+      }
       setSelectedUser(ccUser);
       setSelectedGroup(null);
       // Build a conversation object for the message components
@@ -369,6 +392,71 @@ const Chats = ({ navigate }) => {
             <CometChatConversations
               onItemClick={handleConversationClick}
               activeConversation={selectedConversation}
+              headerView={<></>}
+              conversationsRequestBuilder={(() => {
+                const builder = new CometChat.ConversationsRequestBuilder().setLimit(30);
+                const originalBuild = builder.build;
+                builder.build = function() {
+                  const request = originalBuild.apply(this, arguments);
+                  const originalFetchNext = request.fetchNext;
+                  if (originalFetchNext) {
+                    request.fetchNext = function() {
+                      return originalFetchNext.apply(this, arguments).then((conversations) => {
+                        if (!conversations) return conversations;
+                        
+                        conversations.forEach(conv => {
+                          const conversationWith = conv.getConversationWith();
+                          if (conversationWith) {
+                            const isUser = conv.getConversationType() === 'user';
+                            const isGroup = conv.getConversationType() === 'group';
+                            
+                            let name = '';
+                            if (typeof conversationWith.getName === 'function') name = conversationWith.getName();
+                            else if (conversationWith.name) name = conversationWith.name;
+
+                            let role = '';
+                            if (typeof conversationWith.getRole === 'function') role = conversationWith.getRole();
+                            else if (conversationWith.role) role = conversationWith.role;
+
+                            let uid = '';
+                            if (typeof conversationWith.getUid === 'function') uid = conversationWith.getUid();
+                            else if (conversationWith.uid) uid = conversationWith.uid;
+
+                            const isDoctor = isUser && (role === 'doctor' || name.toLowerCase().startsWith('dr.'));
+                            const isAIAgent = isUser && uid === 'medicare_ai_assistant';
+
+                            if (isDoctor || isAIAgent || isGroup) {
+                              if (typeof conversationWith.setAvatar === 'function') conversationWith.setAvatar(undefined);
+                              conversationWith.avatar = undefined;
+                              if (typeof conversationWith.setIcon === 'function') conversationWith.setIcon(undefined);
+                              conversationWith.icon = undefined;
+
+                              if (isDoctor) {
+                                const cleanName = name.replace(/^dr\.\s+/i, '').trim();
+                                if (typeof conversationWith.setName === 'function') conversationWith.setName(cleanName);
+                                conversationWith.name = cleanName;
+                              } else if (isAIAgent) {
+                                if (typeof conversationWith.setName === 'function') conversationWith.setName('AI');
+                                conversationWith.name = 'AI';
+                              }
+                            }
+                          }
+                        });
+
+                        return conversations.filter(conv => {
+                          const conversationWith = conv.getConversationWith();
+                          if (conv.getConversationType() === 'user' && conversationWith) {
+                            return conversationWith.getUid() !== 'medicare_ai_assistant';
+                          }
+                          return true;
+                        });
+                      });
+                    };
+                  }
+                  return request;
+                };
+                return builder;
+              })()}
             />
           </div>
         )}
@@ -409,9 +497,12 @@ const Chats = ({ navigate }) => {
                     hideVideoCallButton={true}
                     hideVoiceCallButton={true}
                   />
-                  {isDoctorUser && selectedGroup && (
+                  {selectedGroup && (
                     <div style={styles.groupActions}>
-                      <CometChatCallButtons group={selectedGroup} />
+                      <CometChatCallButtons
+                        group={selectedGroup}
+                        {...(!isDoctorUser && { hideVideoCallButton: true, hideVoiceCallButton: true })}
+                      />
                       {selectedGroup.getOwner() === cometChatUid && (
                         <div ref={groupMenuRef} style={styles.dropdownContainer}>
                           <button style={styles.actionBtn} onClick={() => setShowGroupMenu(!showGroupMenu)}>
@@ -463,7 +554,57 @@ const Chats = ({ navigate }) => {
                 </div>
 
                 <div style={styles.messageList}>
-                  <CometChatMessageList group={selectedGroup} />
+                  <CometChatMessageList
+                    group={selectedGroup}
+                    messagesRequestBuilder={(() => {
+                      const builder = new CometChat.MessagesRequestBuilder().setLimit(30);
+                      const originalBuild = builder.build;
+                      builder.build = function() {
+                        const request = originalBuild.apply(this, arguments);
+                        const originalFetchPrevious = request.fetchPrevious;
+                        if (originalFetchPrevious) {
+                          request.fetchPrevious = function() {
+                            return originalFetchPrevious.apply(this, arguments).then((messages) => {
+                              if (!messages) return messages;
+                              
+                              messages.forEach(msg => {
+                                const sender = typeof msg.getSender === 'function' ? msg.getSender() : msg.sender;
+                                if (sender) {
+                                  const role = sender.getRole?.() || sender.role || '';
+                                  const name = sender.getName?.() || sender.name || '';
+                                  const isDoctor = role === 'doctor' || name.toLowerCase().startsWith('dr.');
+                                  if (isDoctor) {
+                                    if (typeof sender.setAvatar === 'function') sender.setAvatar(undefined);
+                                    sender.avatar = undefined;
+                                    const cleanName = name.replace(/^dr\.\s+/i, '').trim();
+                                    if (typeof sender.setName === 'function') sender.setName(cleanName);
+                                    sender.name = cleanName;
+                                  }
+                                }
+                              });
+
+                              const seenCalls = new Set();
+                              return messages.filter((msg) => {
+                                const isCall = msg.getCategory?.() === 'call' || msg.category === 'call';
+                                if (isCall) {
+                                  const action = msg.getAction?.() || msg.action;
+                                  const sessionId = msg.getSessionId?.() || msg.sessionId || (msg.getData?.()?.sessionId);
+                                  if (action && sessionId) {
+                                    const key = `${sessionId}-${action}`;
+                                    if (seenCalls.has(key)) return false;
+                                    seenCalls.add(key);
+                                  }
+                                }
+                                return true;
+                              });
+                            });
+                          };
+                        }
+                        return request;
+                      };
+                      return builder;
+                    })()}
+                  />
                 </div>
 
                 <div style={styles.messageComposer}>
@@ -504,7 +645,57 @@ const Chats = ({ navigate }) => {
 
               {/* Message list */}
               <div style={styles.messageList}>
-                <CometChatMessageList user={selectedUser} />
+                <CometChatMessageList
+                  user={selectedUser}
+                  messagesRequestBuilder={(() => {
+                    const builder = new CometChat.MessagesRequestBuilder().setLimit(30);
+                    const originalBuild = builder.build;
+                    builder.build = function() {
+                      const request = originalBuild.apply(this, arguments);
+                      const originalFetchPrevious = request.fetchPrevious;
+                      if (originalFetchPrevious) {
+                        request.fetchPrevious = function() {
+                          return originalFetchPrevious.apply(this, arguments).then((messages) => {
+                            if (!messages) return messages;
+                            
+                            messages.forEach(msg => {
+                              const sender = typeof msg.getSender === 'function' ? msg.getSender() : msg.sender;
+                              if (sender) {
+                                const role = sender.getRole?.() || sender.role || '';
+                                const name = sender.getName?.() || sender.name || '';
+                                const isDoctor = role === 'doctor' || name.toLowerCase().startsWith('dr.');
+                                if (isDoctor) {
+                                  if (typeof sender.setAvatar === 'function') sender.setAvatar(undefined);
+                                  sender.avatar = undefined;
+                                  const cleanName = name.replace(/^dr\.\s+/i, '').trim();
+                                  if (typeof sender.setName === 'function') sender.setName(cleanName);
+                                  sender.name = cleanName;
+                                }
+                              }
+                            });
+
+                            const seenCalls = new Set();
+                            return messages.filter((msg) => {
+                              const isCall = msg.getCategory?.() === 'call' || msg.category === 'call';
+                              if (isCall) {
+                                const action = msg.getAction?.() || msg.action;
+                                const sessionId = msg.getSessionId?.() || msg.sessionId || (msg.getData?.()?.sessionId);
+                                if (action && sessionId) {
+                                  const key = `${sessionId}-${action}`;
+                                  if (seenCalls.has(key)) return false;
+                                  seenCalls.add(key);
+                                }
+                              }
+                              return true;
+                            });
+                          });
+                        };
+                      }
+                      return request;
+                    };
+                    return builder;
+                  })()}
+                />
               </div>
 
               {/* Message composer */}

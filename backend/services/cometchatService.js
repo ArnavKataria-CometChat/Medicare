@@ -200,8 +200,14 @@ export async function syncUserToCometChat(user, specialization = null, isAgent =
   const uid = deriveCometChatUid(user.id);
   const tags = buildUserTags(user.role, specialization, isAgent);
 
+  // Strip "Dr." prefix for doctor names so CometChat renders clean initials (e.g. "RC" not "DR")
+  let displayName = user.name;
+  if (user.role === 'DOCTOR' && /^dr\.\s+/i.test(displayName)) {
+    displayName = displayName.replace(/^dr\.\s+/i, '').trim();
+  }
+
   // Create or update the user in CometChat
-  const ccUser = await createCometChatUser(uid, user.name, user.role, tags);
+  const ccUser = await createCometChatUser(uid, displayName, user.role, tags);
   if (!ccUser) {
     console.error(`[CometChat] syncUserToCometChat failed for ${uid}`);
     return null;

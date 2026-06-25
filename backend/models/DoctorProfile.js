@@ -28,16 +28,12 @@ const DoctorProfile = sequelize.define('DoctorProfile', {
   availabilityHours: {
     type: DataTypes.STRING,
     allowNull: true,
-    defaultValue: 'Mon-Fri 9am-5pm',
+    defaultValue: 'Mon-Sat 10am-7pm',
   },
   isAvailable: {
     type: DataTypes.BOOLEAN,
     defaultValue: true,
     allowNull: false,
-  },
-  imageUrl: {
-    type: DataTypes.STRING,
-    allowNull: true,
   },
 });
 
