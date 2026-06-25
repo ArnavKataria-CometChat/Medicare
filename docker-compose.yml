@@ -1,7 +1,8 @@
 services:
   db:
     image: postgres:16-alpine
-    container_name: ${DB_CONTAINER_NAME:-medicare-db}
+    # default container name changed to avoid colliding with an existing stack
+    container_name: ${DB_CONTAINER_NAME:-medicare-db-cometchat}
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${DB_USER:-postgres}
@@ -21,12 +22,14 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: ${APP_CONTAINER_NAME:-medicare-app}
+    # default container name changed to avoid colliding with an existing stack
+    container_name: ${APP_CONTAINER_NAME:-medicare-app-cometchat}
     restart: unless-stopped
     ports:
       # Bind to all interfaces so local network IP is accessible.
-      # Use HOST_PORT to avoid conflicts on the host (e.g. HOST_PORT=5001)
-      - "${HOST_PORT:-5000}:5000"
+      # Default host port changed to 5001 so plain `docker compose up -d`
+      # won't conflict with an existing service on 5000.
+      - "${HOST_PORT:-5001}:5000"
     environment:
       PORT: 5000
       NODE_ENV: production
