@@ -1,7 +1,7 @@
 services:
   db:
     image: postgres:16-alpine
-    container_name: medicare-db
+    container_name: ${DB_CONTAINER_NAME:-medicare-db}
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${DB_USER:-postgres}
@@ -21,11 +21,12 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: medicare-app
+    container_name: ${APP_CONTAINER_NAME:-medicare-app}
     restart: unless-stopped
     ports:
       # Bind to all interfaces so local network IP is accessible.
-      - "5000:5000"
+      # Use HOST_PORT to avoid conflicts on the host (e.g. HOST_PORT=5001)
+      - "${HOST_PORT:-5000}:5000"
     environment:
       PORT: 5000
       NODE_ENV: production
