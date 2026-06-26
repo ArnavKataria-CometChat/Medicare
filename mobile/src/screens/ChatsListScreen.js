@@ -95,7 +95,8 @@ const ChatsListScreen = ({ navigation }) => {
       });
       if (res.ok) {
         const data = await res.json();
-        setContacts(data.contacts || []);
+        const filtered = (data.contacts || []).filter(c => c.id !== 'medicare_ai_assistant' && c.cometChatUid !== 'medicare_ai_assistant');
+        setContacts(filtered);
       }
     } catch (error) {
       console.error('[ChatsListScreen] Error fetching contacts:', error);

@@ -1,6 +1,103 @@
 import React, { useEffect, useState } from 'react';
 import { useToast } from '../context/ToastContext';
 
+const renderInlineText = (text) => {
+  const parts = [];
+  const regex = /\*\*(.+?)\*\*/g;
+  let lastIndex = 0;
+  let match;
+
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(text.substring(lastIndex, match.index));
+    }
+    parts.push(<strong key={match.index}>{match[1]}</strong>);
+    lastIndex = regex.lastIndex;
+  }
+
+  if (lastIndex < text.length) {
+    parts.push(text.substring(lastIndex));
+  }
+
+  return parts.length > 0 ? parts : text;
+};
+
+const renderMarkdown = (content) => {
+  if (!content) return null;
+  
+  const lines = content.split('\n');
+  const elements = [];
+  let listItems = [];
+  
+  const flushList = (key) => {
+    if (listItems.length > 0) {
+      elements.push(
+        <ul key={`ul-${key}`} style={{ paddingLeft: '1.5rem', margin: '0.5rem 0 1rem 0', listStyleType: 'disc' }}>
+          {listItems}
+        </ul>
+      );
+      listItems = [];
+    }
+  };
+
+  lines.forEach((line, idx) => {
+    const trimmed = line.trim();
+    
+    // Handle headers
+    if (trimmed.startsWith('####')) {
+      flushList(idx);
+      elements.push(
+        <h4 key={idx} style={{ fontSize: '1.25rem', marginTop: '1.5rem', marginBottom: '0.5rem', color: 'var(--text-primary)', fontWeight: '600' }}>
+          {trimmed.replace(/^####\s*/, '').trim()}
+        </h4>
+      );
+    } else if (trimmed.startsWith('###')) {
+      flushList(idx);
+      elements.push(
+        <h3 key={idx} style={{ fontSize: '1.5rem', marginTop: '1.75rem', marginBottom: '0.75rem', color: 'var(--text-primary)', fontWeight: '600' }}>
+          {trimmed.replace(/^###\s*/, '').trim()}
+        </h3>
+      );
+    } 
+    // Handle list items
+    else if (trimmed.match(/^[-*]\s/)) {
+      const text = trimmed.replace(/^[-*]\s*/, '').trim();
+      listItems.push(
+        <li key={idx} style={{ marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>
+          {renderInlineText(text)}
+        </li>
+      );
+    } else if (trimmed.match(/^\d+\.\s/)) {
+      flushList(idx);
+      const text = trimmed.replace(/^\d+\.\s*/, '').trim();
+      elements.push(
+        <div key={idx} style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem', paddingLeft: '0.5rem', color: 'var(--text-secondary)' }}>
+          <span style={{ fontWeight: 'bold', color: 'var(--primary)' }}>{trimmed.match(/^\d+\./)[0]}</span>
+          <span>{renderInlineText(text)}</span>
+        </div>
+      );
+    } 
+    // Handle empty lines
+    else if (!trimmed) {
+      flushList(idx);
+      elements.push(<div key={idx} style={{ height: '0.5rem' }} />);
+    } 
+    // Handle regular paragraphs
+    else {
+      flushList(idx);
+      elements.push(
+        <p key={idx} style={{ marginBottom: '1rem', color: 'var(--text-secondary)', lineHeight: '1.8' }}>
+          {renderInlineText(trimmed)}
+        </p>
+      );
+    }
+  });
+  
+  flushList('end');
+  
+  return elements;
+};
+
 const ArticleDetail = ({ navigate, articleId }) => {
   const { addToast } = useToast();
   const [article, setArticle] = useState(null);
@@ -80,11 +177,10 @@ const ArticleDetail = ({ navigate, articleId }) => {
           style={{
             lineHeight: '1.8',
             fontSize: '1.1rem',
-            color: 'var(--text-primary)',
-            whiteSpace: 'pre-wrap' // Preserves formatting from seeds
+            color: 'var(--text-primary)'
           }}
         >
-          {article.content}
+          {renderMarkdown(article.content)}
         </div>
 
         {(article.symptoms || article.prevention) && (

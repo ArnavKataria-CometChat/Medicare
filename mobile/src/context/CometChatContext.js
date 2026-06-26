@@ -73,6 +73,15 @@ function applyCometChatInterceptor(sdk) {
                 globalSeenCallKeys.add(key);
               }
             }
+            if (message) {
+              const sender = typeof message.getSender === 'function' ? message.getSender() : message.sender;
+              const senderUid = sender ? (typeof sender.getUid === 'function' ? sender.getUid() : sender.uid) : '';
+              const receiverUid = typeof message.getReceiverId === 'function' ? message.getReceiverId() : message.receiverId;
+              if (senderUid === 'medicare_ai_assistant' || receiverUid === 'medicare_ai_assistant') {
+                console.log(`[CometChat Interceptor] Filtered message from/to medicare_ai_assistant in ${callbackName}`);
+                return; // Suppress from updating UIKit list
+              }
+            }
             return listener[callbackName].apply(this, arguments);
           };
         }

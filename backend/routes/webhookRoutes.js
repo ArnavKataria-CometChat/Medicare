@@ -65,10 +65,15 @@ async function handleMessageSent(payload) {
     }
   }
 
-  // W5: Write to NOTIFICATION_LOG for push delivery tracking (exclude AI assistant replies)
+  // W5: Write to NOTIFICATION_LOG for push delivery tracking (exclude AI assistant replies) and trigger push notifications
   if (receiverUid && receiverUid !== 'medicare_ai_assistant' && senderUid !== 'medicare_ai_assistant') {
     const receiverUser = await User.findOne({ where: { cometChatUid: receiverUid } });
     if (receiverUser) {
+      const senderName = data.sender?.name || 'Someone';
+      const preview = typeof data.text === 'string'
+        ? (data.text.length > 80 ? data.text.slice(0, 80) + '...' : data.text)
+        : '[media]';
+
       await NotificationLog.create({
         userId: receiverUser.id,
         type: 'cometchat',
@@ -76,10 +81,27 @@ async function handleMessageSent(payload) {
         status: 'delivered',
         payload: JSON.stringify({
           senderUid,
-          senderName: data.sender?.name,
-          preview: typeof data.text === 'string' ? data.text.slice(0, 80) : '[media]',
+          senderName,
+          preview,
         }),
       });
+
+      // Send Web Push (browser)
+      sendPush(receiverUser.id, `💬 ${senderName}`, preview, '/chats')
+        .catch(err => console.error('[Webhook] Message web push error:', err));
+
+      // Send Mobile Push (FCM / Expo)
+      sendExpoPush(receiverUser.id, `💬 ${senderName}`, preview, {
+        type: 'chat_message',
+        senderId: senderUid,
+        senderName
+      }).catch(err => console.error('[Webhook] Message expo push error:', err));
+
+      // Send Socket Notification if active
+      const sendSocketNotification = req?.app?.locals?.sendSocketNotification;
+      if (sendSocketNotification) {
+        sendSocketNotification(receiverUser.id, { title: `💬 ${senderName}`, body: preview, url: '/chats' });
+      }
     }
   }
 

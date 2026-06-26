@@ -198,6 +198,12 @@ const NavigationWrapper = () => {
     });
 
     socket.on('message:received', (message) => {
+      // Filter out notifications from medicare_ai_assistant
+      const senderUid = message.senderId || message.sender?.uid || message.sender?.cometChatUid;
+      if (senderUid === 'medicare_ai_assistant') {
+        return;
+      }
+
       // Only show in-app notification if user is NOT on the ChatSimulation screen
       const currentRoute = currentRouteRef.current;
       if (currentRoute !== 'ChatSimulation') {
@@ -354,7 +360,7 @@ export default function App() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <CometChatI18nProvider>
-          <CometChatThemeProvider>
+          <CometChatThemeProvider theme={{ mode: 'light' }}>
             <AuthProvider>
               <CometChatProvider>
                 <StatusBar style="dark" />

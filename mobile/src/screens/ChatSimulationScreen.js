@@ -196,20 +196,11 @@ const ChatSimulationScreen = ({ route, navigation }) => {
 
   // Set navigation header
   useEffect(() => {
-    const titleText = contact ? contact.name : (group ? group.name : '');
-    if (titleText) {
-      navigation.setOptions({
-        headerTitle: () => (
-          <View style={styles.headerTitleContainer}>
-            <Text style={styles.headerTitleText} numberOfLines={1}>
-              {titleText}
-            </Text>
-          </View>
-        ),
-        headerRight: () => null,
-      });
-    }
-  }, [contact, group, navigation, isDoctorUser, ccGroup, cometChatUid]);
+    navigation.setOptions({
+      headerTitle: '',
+      headerRight: () => null,
+    });
+  }, [navigation]);
 
   if (!contact && !group) {
     return (
